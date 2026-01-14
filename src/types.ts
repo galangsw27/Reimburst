@@ -1,4 +1,6 @@
 export interface ReimbursementData {
+    nama: string;
+    msisdnEmail: string;
     tgl: string;
     time: string;
     trxId: string;
@@ -16,3 +18,52 @@ export interface ReimbursementData {
 }
 
 export type AppState = 'upload' | 'processing' | 'review' | 'success' | 'error';
+
+// New types for reimbursement management system
+export type UserRole = 'user' | 'head' | 'lead' | 'finance';
+
+export type ReimbursementStatus = 'pending' | 'approved_head' | 'approved_lead' | 'approved_finance' | 'rejected';
+
+export interface User {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+}
+
+export interface ReimbursementRequest {
+    id: string;
+    no: number;
+    userId: string;
+    userName: string;
+    submittedDate: string;
+    data: ReimbursementData;
+    status: ReimbursementStatus;
+    imageUrl?: string;
+    approvals: {
+        head?: { approved: boolean; by: string; date: string; comment?: string };
+        lead?: { approved: boolean; by: string; date: string; comment?: string };
+        finance?: { approved: boolean; by: string; date: string; comment?: string; assetMatch?: AssetMatchResult };
+    };
+    rejectionReason?: string;
+}
+
+export interface AssetMatchResult {
+    matched: boolean;
+    assetId?: string;
+    assetName?: string;
+    employeeName?: string;
+    department?: string;
+    matchedBy: 'msisdn' | 'email';
+    matchedValue: string;
+    confidence?: number;
+    verifiedDate: string;
+}
+
+export interface DashboardStats {
+    totalRequests: number;
+    pendingApproval: number;
+    approved: number;
+    rejected: number;
+    totalAmount: number;
+}

@@ -7,3 +7,4 @@ dist-ssr
 # Environment variables (contains sensitive data)
 .env
 .env.local
+*.md
