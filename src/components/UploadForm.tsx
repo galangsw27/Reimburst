@@ -22,6 +22,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ user, onSuccess }) => {
     const [data, setData] = useState<ReimbursementData>({
         nama: '',
         msisdnEmail: '',
+        project: 'MaxStream',
         tgl: '', time: '', trxId: '', transaksi: '', paymentType: '',
         amount: 0, bAdmin: 0, bKirim: 0, bLayanan: 0, diskon: 0,
         loginStatus: 'Login', total: 0, by: '', remark: ''
@@ -185,6 +186,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ user, onSuccess }) => {
             setData({
                 nama: '',
                 msisdnEmail: '',
+                project: 'MaxStream',
                 tgl: parseDate(extracted.tanggal),
                 time: parseTime(extracted.waktu),
                 trxId: getString(extracted.trx_id),
@@ -214,7 +216,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ user, onSuccess }) => {
         setState('processing');
 
         try {
-            createRequest(user.id, user.name, data, previewUrl || undefined);
+            createRequest(user.id, user.name, data, previewUrl || undefined, user.leadId, user.leadName);
             setState('success');
             setTimeout(() => {
                 onSuccess();
@@ -232,6 +234,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ user, onSuccess }) => {
         setData({
             nama: '',
             msisdnEmail: '',
+            project: 'MaxStream',
             tgl: '', time: '', trxId: '', transaksi: '', paymentType: '',
             amount: 0, bAdmin: 0, bKirim: 0, bLayanan: 0, diskon: 0,
             loginStatus: 'Login', total: 0, by: '', remark: ''
@@ -242,6 +245,47 @@ export const UploadForm: React.FC<UploadFormProps> = ({ user, onSuccess }) => {
         <AnimatePresence mode="wait">
             {state === 'upload' && (
                 <motion.div key="upload" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                    {/* User Info & Project Selection - BEFORE Upload */}
+                    <Card className="mb-6">
+                        <CardHeader>
+                            <CardTitle>Informasi Pengajuan</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {/* User Info Display */}
+                            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <h3 className="text-sm font-semibold mb-3 text-blue-400">Informasi User</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                        <span className="text-muted-foreground">Nama User:</span>
+                                        <p className="font-medium text-white">{user.name}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground">Lead:</span>
+                                        <p className="font-medium text-white">{user.leadName || '-'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Project Selection */}
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium">
+                                    Project <span className="text-red-500">*</span>
+                                </Label>
+                                <Select value={data.project} onValueChange={val => setData({ ...data, project: val as any })}>
+                                    <SelectTrigger className="bg-background">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="MaxStream">MaxStream</SelectItem>
+                                        <SelectItem value="MyOrbit">MyOrbit</SelectItem>
+                                        <SelectItem value="Dunia Games">Dunia Games</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Upload Card */}
                     <Card className="cursor-pointer hover:border-primary/50 transition-all" onClick={() => fileInputRef.current?.click()}>
                         <CardContent className="py-16 flex flex-col items-center text-center">
                             <motion.div
@@ -292,7 +336,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ user, onSuccess }) => {
                         </CardHeader>
                         <CardContent className="pt-6">
                             <form onSubmit={handleSubmit} className="space-y-6">
-                                {/* Nama & MSISDN/Email Section - PALING ATAS */}
+                                {/* Nama & MSISDN/Email Section */}
                                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
                                     <h3 className="text-sm font-semibold mb-4 text-primary">Informasi Pengaju</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

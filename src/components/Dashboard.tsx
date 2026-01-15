@@ -18,12 +18,20 @@ type DashboardView = 'overview' | 'upload' | 'approval' | 'history' | 'download'
 
 export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     const [view, setView] = useState<DashboardView>('overview');
-    const [stats, setStats] = useState({
+    const [stats, setStats] = useState<{
+        totalRequests: number;
+        pendingApproval: number;
+        approved: number;
+        rejected: number;
+        totalAmount: number;
+        byProject: Record<string, { count: number; total: number }>;
+    }>({
         totalRequests: 0,
         pendingApproval: 0,
         approved: 0,
         rejected: 0,
         totalAmount: 0,
+        byProject: {},
     });
 
     const loadStats = () => {
@@ -55,10 +63,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                 <header className="mb-8 flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold text-white glow-text">
-                            {getRoleTitle()}
+                            AIRism
                         </h1>
                         <p className="text-muted-foreground mt-1">
-                            Welcome back, {user.name}
+                            {getRoleTitle()} • Welcome back, {user.name}
                         </p>
                     </div>
                     <Button variant="outline" onClick={onLogout}>
@@ -117,59 +125,85 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+                        className="space-y-6"
                     >
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-                                <FileText className="w-4 h-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.totalRequests}</div>
-                            </CardContent>
-                        </Card>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+                                    <FileText className="w-4 h-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{stats.totalRequests}</div>
+                                </CardContent>
+                            </Card>
 
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
-                                <Clock className="w-4 h-4 text-yellow-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-yellow-500">{stats.pendingApproval}</div>
-                            </CardContent>
-                        </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
+                                    <Clock className="w-4 h-4 text-yellow-500" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-yellow-500">{stats.pendingApproval}</div>
+                                </CardContent>
+                            </Card>
 
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                <CardTitle className="text-sm font-medium">Approved</CardTitle>
-                                <CheckCircle className="w-4 h-4 text-green-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-green-500">{stats.approved}</div>
-                            </CardContent>
-                        </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-sm font-medium">Approved</CardTitle>
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-green-500">{stats.approved}</div>
+                                </CardContent>
+                            </Card>
 
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                <CardTitle className="text-sm font-medium">Rejected</CardTitle>
-                                <XCircle className="w-4 h-4 text-red-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-red-500">{stats.rejected}</div>
-                            </CardContent>
-                        </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-sm font-medium">Rejected</CardTitle>
+                                    <XCircle className="w-4 h-4 text-red-500" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-red-500">{stats.rejected}</div>
+                                </CardContent>
+                            </Card>
 
-                        <Card className="md:col-span-2 lg:col-span-4">
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
-                                <DollarSign className="w-4 h-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-bold">
-                                    Rp {stats.totalAmount.toLocaleString('id-ID')}
-                                </div>
-                            </CardContent>
-                        </Card>
+                            <Card className="md:col-span-2 lg:col-span-4">
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
+                                    <DollarSign className="w-4 h-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-3xl font-bold">
+                                        Rp {stats.totalAmount.toLocaleString('id-ID')}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Project Grouping */}
+                        {Object.keys(stats.byProject).length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Breakdown by Project</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-4">
+                                        {Object.entries(stats.byProject).map(([project, data]) => (
+                                            <div key={project} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                                                <div>
+                                                    <h3 className="font-semibold text-lg">{project}</h3>
+                                                    <p className="text-sm text-muted-foreground">{data.count} requests</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-2xl font-bold">Rp {data.total.toLocaleString('id-ID')}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
                     </motion.div>
                 )}
 

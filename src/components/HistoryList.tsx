@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Download, Eye, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
+import { Download, Eye, CheckCircle, XCircle, Clock, FileText, Upload, ExternalLink, Loader2, Filter, Calendar, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 import { User, ReimbursementRequest } from '../types';
-import { getAllRequests, getRequestsByUser, getApprovedRequests, exportToExcel } from '../services/reimbursementService';
+import { getAllRequests, getRequestsByUser, getApprovedRequests, exportToExcel, exportToGoogleSheets, downloadProjectExcel, getProjectSheetUrl } from '../services/reimbursementService';
 
 interface HistoryListProps {
     user: User;
@@ -15,6 +18,12 @@ export const HistoryList: React.FC<HistoryListProps> = ({ user, showDownload = f
     const [requests, setRequests] = useState<ReimbursementRequest[]>([]);
     const [selectedRequest, setSelectedRequest] = useState<ReimbursementRequest | null>(null);
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+    const [projectFilter, setProjectFilter] = useState<string>('all');
+    const [leadFilter, setLeadFilter] = useState<string>('all');
+    const [dateFrom, setDateFrom] = useState<string>('');
+    const [dateTo, setDateTo] = useState<string>('');
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportMessage, setExportMessage] = useState<string>('');
 
     useEffect(() => {
         loadRequests();
@@ -31,22 +40,130 @@ export const HistoryList: React.FC<HistoryListProps> = ({ user, showDownload = f
             allRequests = getAllRequests();
         }
         
+        // Sort from oldest to newest (terlama ke terbaru)
         setRequests(allRequests.sort((a, b) => 
-            new Date(b.submittedDate).getTime() - new Date(a.submittedDate).getTime()
+            new Date(a.submittedDate).getTime() - new Date(b.submittedDate).getTime()
         ));
     };
 
+    const getLeadsWithData = () => {
+        const leads = new Set<string>();
+        requests.forEach(req => {
+            if (req.leadName) {
+                leads.add(req.leadName);
+            }
+        });
+        return Array.from(leads).sort();
+    };
+
+    const filteredRequests = requests.filter(req => {
+        // Status filter
+        let statusMatch = true;
+        if (filter === 'pending') statusMatch = req.status === 'pending' || req.status === 'approved_head' || req.status === 'approved_lead';
+        else if (filter === 'approved') statusMatch = req.status === 'approved_finance';
+        else if (filter === 'rejected') statusMatch = req.status === 'rejected';
+        
+        // Project filter
+        const projectMatch = projectFilter === 'all' || req.data.project === projectFilter;
+        
+        // Lead filter (only for finance and head)
+        const leadMatch = leadFilter === 'all' || req.leadName === leadFilter;
+        
+        // Date filter
+        let dateMatch = true;
+        if (dateFrom || dateTo) {
+            const submitDate = new Date(req.submittedDate);
+            if (dateFrom) {
+                const fromDate = new Date(dateFrom);
+                fromDate.setHours(0, 0, 0, 0);
+                dateMatch = dateMatch && submitDate >= fromDate;
+            }
+            if (dateTo) {
+                const toDate = new Date(dateTo);
+                toDate.setHours(23, 59, 59, 999);
+                dateMatch = dateMatch && submitDate <= toDate;
+            }
+        }
+        
+        return statusMatch && projectMatch && leadMatch && dateMatch;
+    });
+
     const handleDownloadExcel = () => {
-        const csvData = exportToExcel(requests);
+        const dataToExport = projectFilter === 'all' ? requests : requests.filter(r => r.data.project === projectFilter);
+        const csvData = exportToExcel(dataToExport);
         const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
+        const filename = projectFilter === 'all' 
+            ? `reimbursement_all_${new Date().toISOString().split('T')[0]}.csv`
+            : `reimbursement_${projectFilter}_${new Date().toISOString().split('T')[0]}.csv`;
         link.setAttribute('href', url);
-        link.setAttribute('download', `reimbursement_approved_${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute('download', filename);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+
+    const handleExportToGoogleSheets = async () => {
+        if (projectFilter === 'all') {
+            alert('Please select a specific project to export to Google Sheets');
+            return;
+        }
+
+        setIsExporting(true);
+        setExportMessage('');
+        
+        try {
+            const projectRequests = requests.filter(r => r.data.project === projectFilter);
+            const result = await exportToGoogleSheets(projectRequests);
+            setExportMessage(result.message);
+            
+            if (result.success) {
+                setTimeout(() => setExportMessage(''), 5000);
+            }
+        } catch (error: any) {
+            setExportMessage(`Error: ${error.message}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleDownloadProjectExcel = () => {
+        if (projectFilter === 'all') {
+            alert('Please select a specific project to download Excel');
+            return;
+        }
+
+        try {
+            downloadProjectExcel(projectFilter);
+        } catch (error: any) {
+            alert(`Error downloading ${projectFilter}: ${error.message}`);
+        }
+    };
+
+    const handleOpenInGoogleSheets = () => {
+        if (projectFilter === 'all') {
+            alert('Please select a specific project to open in Google Sheets');
+            return;
+        }
+
+        const url = getProjectSheetUrl(projectFilter);
+        if (url) {
+            window.open(url, '_blank');
+        } else {
+            alert(`Google Sheet not configured for ${projectFilter}`);
+        }
+    };
+
+    const getProjectsWithData = () => {
+        const projects = new Set<string>();
+        requests.forEach(req => {
+            if (req.data.project) {
+                projects.add(req.data.project);
+            }
+        });
+        return Array.from(projects).sort();
     };
 
     const getStatusBadge = (status: string) => {
@@ -60,14 +177,6 @@ export const HistoryList: React.FC<HistoryListProps> = ({ user, showDownload = f
         return badges[status as keyof typeof badges] || badges.pending;
     };
 
-    const filteredRequests = requests.filter(req => {
-        if (filter === 'all') return true;
-        if (filter === 'pending') return req.status === 'pending' || req.status === 'approved_head' || req.status === 'approved_lead';
-        if (filter === 'approved') return req.status === 'approved_finance';
-        if (filter === 'rejected') return req.status === 'rejected';
-        return true;
-    });
-
     return (
         <div className="space-y-4">
             <Card>
@@ -77,12 +186,186 @@ export const HistoryList: React.FC<HistoryListProps> = ({ user, showDownload = f
                             {showDownload ? 'Approved Reimbursements' : 'History'} ({filteredRequests.length})
                         </CardTitle>
                         {showDownload && requests.length > 0 && (
-                            <Button onClick={handleDownloadExcel}>
-                                <Download className="w-4 h-4" />
-                                Download Excel
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button onClick={handleDownloadExcel} variant="outline" size="sm">
+                                    <Download className="w-4 h-4" />
+                                    Download CSV
+                                </Button>
+                            </div>
                         )}
                     </div>
+                    
+                    {/* Filters Section */}
+                    <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Filter className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-semibold">Filters</span>
+                            {(projectFilter !== 'all' || leadFilter !== 'all' || dateFrom || dateTo) && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setProjectFilter('all');
+                                        setLeadFilter('all');
+                                        setDateFrom('');
+                                        setDateTo('');
+                                    }}
+                                    className="h-6 px-2 text-xs"
+                                >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Clear All
+                                </Button>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {/* Date From */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Date From
+                                </Label>
+                                <Input
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    className="h-9"
+                                />
+                            </div>
+
+                            {/* Date To */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Date To
+                                </Label>
+                                <Input
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={(e) => setDateTo(e.target.value)}
+                                    className="h-9"
+                                />
+                            </div>
+
+                            {/* Project Filter */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Project</Label>
+                                <Select value={projectFilter} onValueChange={setProjectFilter}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Projects</SelectItem>
+                                        {getProjectsWithData().map(project => (
+                                            <SelectItem key={project} value={project}>
+                                                {project}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Lead Filter (only for finance and head) */}
+                            {(user.role === 'finance' || user.role === 'head') && (
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Lead</Label>
+                                    <Select value={leadFilter} onValueChange={setLeadFilter}>
+                                        <SelectTrigger className="h-9">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Leads</SelectItem>
+                                            {getLeadsWithData().map(lead => (
+                                                <SelectItem key={lead} value={lead}>
+                                                    {lead}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Active Filters Display */}
+                        {(projectFilter !== 'all' || leadFilter !== 'all' || dateFrom || dateTo) && (
+                            <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                                <span className="text-xs text-muted-foreground">Active filters:</span>
+                                {dateFrom && (
+                                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                                        From: {new Date(dateFrom).toLocaleDateString('id-ID')}
+                                    </span>
+                                )}
+                                {dateTo && (
+                                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                                        To: {new Date(dateTo).toLocaleDateString('id-ID')}
+                                    </span>
+                                )}
+                                {projectFilter !== 'all' && (
+                                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                                        Project: {projectFilter}
+                                    </span>
+                                )}
+                                {leadFilter !== 'all' && (
+                                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                                        Lead: {leadFilter}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Google Sheets Actions (for Download Excel view) */}
+                    {showDownload && requests.length > 0 && projectFilter !== 'all' && (
+                        <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-3">
+                            <h4 className="text-sm font-semibold">Google Sheets Actions for {projectFilter}:</h4>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    size="sm"
+                                    onClick={handleExportToGoogleSheets}
+                                    disabled={isExporting}
+                                >
+                                    {isExporting ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Exporting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-4 h-4" />
+                                            Export to Google Sheets
+                                        </>
+                                    )}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={handleDownloadProjectExcel}
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Download Excel from Sheets
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleOpenInGoogleSheets}
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    Open in Google Sheets
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {exportMessage && (
+                        <div className={`mt-2 p-3 rounded-lg text-sm ${
+                            exportMessage.includes('Error') 
+                                ? 'bg-red-500/10 text-red-500 border border-red-500/30' 
+                                : 'bg-green-500/10 text-green-500 border border-green-500/30'
+                        }`}>
+                            {exportMessage}
+                        </div>
+                    )}
+                    
                     {!showDownload && (
                         <div className="flex gap-2 mt-4">
                             <Button
@@ -162,6 +445,14 @@ export const HistoryList: React.FC<HistoryListProps> = ({ user, showDownload = f
                                             <div>
                                                 <span className="text-muted-foreground">MSISDN/Email:</span>
                                                 <p className="font-medium">{request.data.msisdnEmail || '-'}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-muted-foreground">Project:</span>
+                                                <p className="font-medium">{request.data.project}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-muted-foreground">Lead:</span>
+                                                <p className="font-medium">{request.leadName || '-'}</p>
                                             </div>
                                             <div>
                                                 <span className="text-muted-foreground">Transaksi:</span>

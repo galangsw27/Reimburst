@@ -38,9 +38,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             >
                 <div className="text-center mb-8">
                     <h1 className="text-4xl font-bold mb-2 text-white glow-text">
-                        Reimbursement System
+                        AIRism
                     </h1>
-                    <p className="text-muted-foreground">
+                    <p className="text-muted-foreground text-lg">
+                        AI Reimbursement System
+                    </p>
+                    <p className="text-muted-foreground text-sm mt-1">
                         Silakan login untuk melanjutkan
                     </p>
                 </div>

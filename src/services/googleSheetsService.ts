@@ -1,26 +1,36 @@
 // Google Sheets Service for Reimbursement AI
 // Handles OAuth and data submission to Google Sheets
 
-// Project configurations
+// Update project config to use webhook URLs
 export interface ProjectConfig {
     id: string;
     name: string;
     spreadsheetId: string;
     sheetName: string;
+    webhookUrl?: string; // Google Apps Script webhook URL
 }
 
 export const PROJECTS: ProjectConfig[] = [
-    {
-        id: 'myorbit',
-        name: 'MyOrbit',
-        spreadsheetId: '15fcJRGyDM6_Ecd229Fjb7t6VsCQmMiJg3qrsint5_PM',
-        sheetName: 'Sheet1',
-    },
     {
         id: 'maxstream',
         name: 'MaxStream',
         spreadsheetId: '1lOhILZhnSQR-fESsPuhDexVNYgyjG6MoAkDuk2a9iAU',
         sheetName: 'Sheet1',
+        webhookUrl: import.meta.env.VITE_MAXSTREAM_WEBHOOK_URL || '',
+    },
+    {
+        id: 'myorbit',
+        name: 'MyOrbit',
+        spreadsheetId: '15fcJRGyDM6_Ecd229Fjb7t6VsCQmMiJg3qrsint5_PM',
+        sheetName: 'Sheet1',
+        webhookUrl: import.meta.env.VITE_MYORBIT_WEBHOOK_URL || '',
+    },
+    {
+        id: 'duniagames',
+        name: 'Dunia Games',
+        spreadsheetId: '', // Add spreadsheet ID when available
+        sheetName: 'Sheet1',
+        webhookUrl: import.meta.env.VITE_DUNIAGAMES_WEBHOOK_URL || '',
     },
 ];
 
@@ -179,6 +189,11 @@ export const getNextNo = async (): Promise<number> => {
 export const appendToSheet = async (data: Omit<ReimbursementRow, 'no' | 'folderEvidence'>): Promise<void> => {
     try {
         const { spreadsheetId, sheetName } = currentProject;
+        
+        if (!spreadsheetId) {
+            throw new Error(`Spreadsheet ID not configured for project: ${currentProject.name}`);
+        }
+        
         const nextRow = await findNextAvailableRow();
         const nextNo = await getNextNo();
 
@@ -229,6 +244,99 @@ export const appendToSheet = async (data: Omit<ReimbursementRow, 'no' | 'folderE
         console.error('Error appending to sheet:', error);
         throw error;
     }
+};
+
+// Batch append using Google Apps Script webhook (NO OAUTH REQUIRED)
+export const batchAppendToSheetViaWebhook = async (
+    projectId: string, 
+    dataRows: Omit<ReimbursementRow, 'no' | 'folderEvidence'>[]
+): Promise<void> => {
+    try {
+        const project = PROJECTS.find(p => p.id === projectId.toLowerCase().replace(/\s+/g, ''));
+        if (!project) {
+            throw new Error(`Project not found: ${projectId}`);
+        }
+        
+        if (!project.webhookUrl) {
+            throw new Error(`Webhook URL not configured for project: ${project.name}. Please setup Google Apps Script webhook.`);
+        }
+
+        // Format date from yyyy-mm-dd to dd/mm/yyyy for Google Sheet
+        const formatDateForSheet = (dateStr: string): string => {
+            if (!dateStr) return '';
+            const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (match) {
+                return `${match[3]}/${match[2]}/${match[1]}`;
+            }
+            return dateStr;
+        };
+
+        // Prepare rows for webhook
+        const rows = dataRows.map(data => ({
+            tgl: formatDateForSheet(data.tgl),
+            time: data.time,
+            trxId: data.trxId,
+            transaksi: data.transaksi,
+            paymentType: data.paymentType,
+            amount: data.amount,
+            bAdmin: data.bAdmin,
+            bKirim: data.bKirim,
+            bLayanan: data.bLayanan,
+            diskon: data.diskon,
+            loginStatus: data.loginStatus,
+            total: data.total,
+            by: data.by,
+            remark: data.remark,
+        }));
+
+        // Send to Google Apps Script webhook
+        const response = await fetch(project.webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ rows }),
+            mode: 'no-cors', // Important for Google Apps Script
+        });
+
+        // Note: With no-cors mode, we can't read the response
+        // But the request will still be processed by Apps Script
+        console.log(`${rows.length} rows sent to ${project.name} via webhook`);
+
+    } catch (error) {
+        console.error('Error sending to webhook:', error);
+        throw error;
+    }
+};
+
+// Download Excel from Google Sheets
+export const downloadExcelFromSheet = (projectId: string): void => {
+    const project = PROJECTS.find(p => p.id === projectId.toLowerCase().replace(/\s+/g, ''));
+    
+    if (!project) {
+        throw new Error(`Project not found: ${projectId}`);
+    }
+    
+    if (!project.spreadsheetId) {
+        throw new Error(`Spreadsheet ID not configured for project: ${project.name}`);
+    }
+
+    // Google Sheets export URL for Excel format
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${project.spreadsheetId}/export?format=xlsx&gid=0`;
+    
+    // Open in new tab to trigger download
+    window.open(exportUrl, '_blank');
+};
+
+// Get spreadsheet URL for viewing
+export const getSpreadsheetUrl = (projectId: string): string => {
+    const project = PROJECTS.find(p => p.id === projectId.toLowerCase().replace(/\s+/g, ''));
+    
+    if (!project || !project.spreadsheetId) {
+        return '';
+    }
+    
+    return `https://docs.google.com/spreadsheets/d/${project.spreadsheetId}/edit`;
 };
 
 // Get Google Client ID from environment

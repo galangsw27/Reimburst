@@ -1,6 +1,9 @@
+export type ProjectType = 'MaxStream' | 'MyOrbit' | 'Dunia Games';
+
 export interface ReimbursementData {
     nama: string;
     msisdnEmail: string;
+    project: ProjectType;
     tgl: string;
     time: string;
     trxId: string;
@@ -29,6 +32,8 @@ export interface User {
     name: string;
     email: string;
     role: UserRole;
+    leadId?: string; // For users, reference to their lead
+    leadName?: string; // For display
 }
 
 export interface ReimbursementRequest {
@@ -36,6 +41,8 @@ export interface ReimbursementRequest {
     no: number;
     userId: string;
     userName: string;
+    leadId?: string; // Lead assigned to this user
+    leadName?: string; // Lead name for display
     submittedDate: string;
     data: ReimbursementData;
     status: ReimbursementStatus;
