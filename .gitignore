@@ -7,4 +7,20 @@ dist-ssr
 # Environment variables (contains sensitive data)
 .env
 .env.local
+
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+
+/.kiro/
+/.vscode/
+
 *.md
+*.test.tsx
