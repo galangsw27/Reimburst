@@ -157,27 +157,27 @@ export const HistoryList: React.FC<HistoryListProps> = () => {
   }
 
   // Handle download Excel from Google Sheets
-  const handleDownloadProjectExcel = () => {
+  const handleDownloadProjectExcel = async () => {
     if (projectFilter === 'all') {
       alert('Please select a specific project to download Excel')
       return
     }
 
     try {
-      googleSheetsService.downloadExcelFromSheet(projectFilter)
+      await googleSheetsService.downloadExcelFromSheet(projectFilter)
     } catch (error: any) {
       alert(`Error downloading ${projectFilter}: ${error.message}`)
     }
   }
 
   // Handle open in Google Sheets
-  const handleOpenInGoogleSheets = () => {
+  const handleOpenInGoogleSheets = async () => {
     if (projectFilter === 'all') {
       alert('Please select a specific project to open in Google Sheets')
       return
     }
 
-    const url = googleSheetsService.getSpreadsheetUrl(projectFilter)
+    const url = await googleSheetsService.getSpreadsheetUrl(projectFilter)
     if (url) {
       window.open(url, '_blank')
     } else {
