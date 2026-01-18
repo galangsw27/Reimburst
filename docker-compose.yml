@@ -29,10 +29,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
     container_name: reimbursement_app
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/reimbursement_db
+      # Use DATABASE_URL from env if available (Railway), otherwise use local postgres
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/reimbursement_db}
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - NEXT_PUBLIC_WEBHOOK_URL=${NEXT_PUBLIC_WEBHOOK_URL}
@@ -41,6 +44,7 @@ services:
       - NEXT_PUBLIC_MYORBIT_WEBHOOK_URL=${NEXT_PUBLIC_MYORBIT_WEBHOOK_URL}
       - NEXT_PUBLIC_DUNIAGAMES_WEBHOOK_URL=${NEXT_PUBLIC_DUNIAGAMES_WEBHOOK_URL}
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+      - PORT=${PORT:-3000}
     ports:
       - "3000:3000"
     depends_on:
@@ -55,6 +59,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
 networks:
   app-network:

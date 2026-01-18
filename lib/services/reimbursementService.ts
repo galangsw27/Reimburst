@@ -14,6 +14,20 @@ import axios from 'axios'
 import { Reimbursement, ReimbursementStatus, OCRResponse, AssetMatchResponse } from '@/lib/types'
 
 /**
+ * Get runtime configuration from API
+ * This allows environment variables to be loaded at runtime instead of build time
+ */
+async function getRuntimeConfig() {
+  try {
+    const response = await axios.get('/api/config')
+    return response.data
+  } catch (error) {
+    console.error('Failed to load runtime config:', error)
+    return null
+  }
+}
+
+/**
  * Process a receipt image using the OCR webhook
  * 
  * Sends the image file directly to the n8n OCR webhook for AI processing.
@@ -27,10 +41,18 @@ import { Reimbursement, ReimbursementStatus, OCRResponse, AssetMatchResponse } f
  */
 export async function processReceipt(file: File): Promise<OCRResponse> {
   try {
-    const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_URL
+    // Try to get webhook URL from build-time env first
+    let webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_URL
+    
+    // If not available at build time, try runtime config
+    if (!webhookUrl) {
+      const config = await getRuntimeConfig()
+      webhookUrl = config?.webhookUrl
+    }
     
     if (!webhookUrl) {
-      throw new Error('NEXT_PUBLIC_WEBHOOK_URL is not configured')
+      console.error('NEXT_PUBLIC_WEBHOOK_URL is not configured. Please set it in Railway dashboard.')
+      throw new Error('Webhook URL tidak dikonfigurasi. Hubungi administrator untuk mengatur NEXT_PUBLIC_WEBHOOK_URL di Railway.')
     }
     
     // Create FormData to send file directly
@@ -71,10 +93,18 @@ export async function processReceipt(file: File): Promise<OCRResponse> {
  */
 export async function matchAsset(description: string): Promise<AssetMatchResponse> {
   try {
-    const webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
+    // Try to get webhook URL from build-time env first
+    let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
+    
+    // If not available at build time, try runtime config
+    if (!webhookUrl) {
+      const config = await getRuntimeConfig()
+      webhookUrl = config?.assetMatchWebhookUrl
+    }
     
     if (!webhookUrl) {
-      throw new Error('NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL is not configured')
+      console.error('NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL is not configured. Please set it in Railway dashboard.')
+      throw new Error('Asset Match Webhook URL tidak dikonfigurasi. Hubungi administrator untuk mengatur NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL di Railway.')
     }
     
     const response = await axios.post(webhookUrl, {
@@ -105,16 +135,30 @@ export async function matchAsset(description: string): Promise<AssetMatchRespons
  * @returns Webhook URL for the project
  * @throws Error if project webhook URL is not configured
  */
-function getProjectWebhookUrl(project: string): string {
+async function getProjectWebhookUrl(project: string): Promise<string> {
   const normalizedProject = project.toLowerCase().replace(/\s+/g, '')
   
-  const webhookUrls: Record<string, string | undefined> = {
+  // Try build-time env vars first
+  let webhookUrls: Record<string, string | undefined> = {
     maxstream: process.env.NEXT_PUBLIC_MAXSTREAM_WEBHOOK_URL,
     myorbit: process.env.NEXT_PUBLIC_MYORBIT_WEBHOOK_URL,
     duniagames: process.env.NEXT_PUBLIC_DUNIAGAMES_WEBHOOK_URL,
   }
   
-  const webhookUrl = webhookUrls[normalizedProject]
+  let webhookUrl = webhookUrls[normalizedProject]
+  
+  // If not available at build time, try runtime config
+  if (!webhookUrl) {
+    const config = await getRuntimeConfig()
+    if (config) {
+      webhookUrls = {
+        maxstream: config.maxstreamWebhookUrl,
+        myorbit: config.myorbitWebhookUrl,
+        duniagames: config.duniagamesWebhookUrl,
+      }
+      webhookUrl = webhookUrls[normalizedProject]
+    }
+  }
   
   if (!webhookUrl) {
     throw new Error(`Webhook URL not configured for project: ${project}`)
@@ -140,7 +184,7 @@ export async function submitToProject(
   project: string
 ): Promise<void> {
   try {
-    const webhookUrl = getProjectWebhookUrl(project)
+    const webhookUrl = await getProjectWebhookUrl(project)
     
     await axios.post(webhookUrl, reimbursement)
   } catch (error) {
