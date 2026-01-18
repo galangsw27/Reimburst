@@ -8,6 +8,7 @@ dist-ssr
 .env
 .env.local
 .env.*
+!.env.example
 
 # Next.js
 /.next/

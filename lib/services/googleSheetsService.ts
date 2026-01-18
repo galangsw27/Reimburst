@@ -2,6 +2,7 @@
 // Handles Google Sheets export functionality via webhook (no OAuth required)
 
 import { Reimbursement, ProjectType } from '@/lib/types'
+import axios from 'axios'
 
 // Project configuration with webhook URLs
 export interface ProjectConfig {
@@ -12,7 +13,64 @@ export interface ProjectConfig {
   webhookUrl?: string // Google Apps Script webhook URL
 }
 
-// Project configurations
+/**
+ * Get runtime configuration from API
+ */
+async function getRuntimeConfig() {
+  try {
+    const response = await axios.get('/api/config')
+    return response.data
+  } catch (error) {
+    console.error('Failed to load runtime config:', error)
+    return null
+  }
+}
+
+/**
+ * Get project configurations with runtime webhook URLs
+ */
+async function getProjects(): Promise<ProjectConfig[]> {
+  // Try build-time env vars first
+  let maxstreamUrl = process.env.NEXT_PUBLIC_MAXSTREAM_WEBHOOK_URL || ''
+  let myorbitUrl = process.env.NEXT_PUBLIC_MYORBIT_WEBHOOK_URL || ''
+  let duniagamesUrl = process.env.NEXT_PUBLIC_DUNIAGAMES_WEBHOOK_URL || ''
+  
+  // If not available at build time, try runtime config
+  if (!maxstreamUrl || !myorbitUrl || !duniagamesUrl) {
+    const config = await getRuntimeConfig()
+    if (config) {
+      maxstreamUrl = maxstreamUrl || config.maxstreamWebhookUrl || ''
+      myorbitUrl = myorbitUrl || config.myorbitWebhookUrl || ''
+      duniagamesUrl = duniagamesUrl || config.duniagamesWebhookUrl || ''
+    }
+  }
+  
+  return [
+    {
+      id: 'maxstream',
+      name: 'MaxStream',
+      spreadsheetId: '1lOhILZhnSQR-fESsPuhDexVNYgyjG6MoAkDuk2a9iAU',
+      sheetName: 'Sheet1',
+      webhookUrl: maxstreamUrl,
+    },
+    {
+      id: 'myorbit',
+      name: 'MyOrbit',
+      spreadsheetId: '15fcJRGyDM6_Ecd229Fjb7t6VsCQmMiJg3qrsint5_PM',
+      sheetName: 'Sheet1',
+      webhookUrl: myorbitUrl,
+    },
+    {
+      id: 'duniagames',
+      name: 'Dunia Games',
+      spreadsheetId: '', // Add spreadsheet ID when available
+      sheetName: 'Sheet1',
+      webhookUrl: duniagamesUrl,
+    },
+  ]
+}
+
+// Static project configurations (for backward compatibility)
 export const PROJECTS: ProjectConfig[] = [
   {
     id: 'maxstream',
@@ -71,9 +129,10 @@ const formatDateForSheet = (dateStr: string): string => {
 /**
  * Get project configuration by project name or ID
  */
-const getProjectConfig = (projectIdentifier: string): ProjectConfig | undefined => {
+const getProjectConfig = async (projectIdentifier: string): Promise<ProjectConfig | undefined> => {
+  const projects = await getProjects()
   const normalized = projectIdentifier.toLowerCase().replace(/\s+/g, '')
-  return PROJECTS.find(
+  return projects.find(
     p => p.id === normalized || p.name.toLowerCase().replace(/\s+/g, '') === normalized
   )
 }
@@ -87,7 +146,7 @@ export const exportToSheets = async (
   projectName: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    const project = getProjectConfig(projectName)
+    const project = await getProjectConfig(projectName)
     
     if (!project) {
       throw new Error(`Project not found: ${projectName}`)
@@ -187,8 +246,8 @@ export const formatForExport = (reimbursements: Reimbursement[]): string[][] => 
  * Download Excel from Google Sheets
  * Opens the Google Sheets export URL in a new tab
  */
-export const downloadExcelFromSheet = (projectName: string): void => {
-  const project = getProjectConfig(projectName)
+export const downloadExcelFromSheet = async (projectName: string): Promise<void> => {
+  const project = await getProjectConfig(projectName)
   
   if (!project) {
     throw new Error(`Project not found: ${projectName}`)
@@ -208,8 +267,8 @@ export const downloadExcelFromSheet = (projectName: string): void => {
 /**
  * Get the Google Sheets URL for viewing
  */
-export const getSpreadsheetUrl = (projectName: string): string => {
-  const project = getProjectConfig(projectName)
+export const getSpreadsheetUrl = async (projectName: string): Promise<string> => {
+  const project = await getProjectConfig(projectName)
   
   if (!project || !project.spreadsheetId) {
     return ''

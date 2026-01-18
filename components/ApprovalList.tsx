@@ -227,10 +227,21 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
     setIsMatchingAsset(true)
     
     try {
-      const webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
+      // Try to get webhook URL from build-time env first
+      let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
+      
+      // If not available at build time, try runtime config
+      if (!webhookUrl) {
+        try {
+          const configResponse = await axios.get('/api/config')
+          webhookUrl = configResponse.data.assetMatchWebhookUrl
+        } catch (configError) {
+          console.error('Failed to load runtime config:', configError)
+        }
+      }
       
       if (!webhookUrl) {
-        throw new Error('Asset matching webhook URL not configured')
+        throw new Error('Asset matching webhook URL tidak dikonfigurasi. Hubungi administrator.')
       }
       
       const response = await axios.post(webhookUrl, {

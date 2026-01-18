@@ -13,14 +13,28 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import LoginPage from '@/components/LoginPage'
 import { useAuth } from '@/providers/AuthProvider'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import axios from 'axios'
 
 export default function Login() {
   const { isAuthenticated } = useAuth()
   const router = useRouter()
+  const [googleClientId, setGoogleClientId] = useState(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '')
 
-  // Get Google Client ID from environment variables
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
+  // Load runtime config if needed
+  useEffect(() => {
+    if (!googleClientId) {
+      axios.get('/api/config')
+        .then(response => {
+          if (response.data.googleClientId) {
+            setGoogleClientId(response.data.googleClientId)
+          }
+        })
+        .catch(error => {
+          console.error('Failed to load runtime config:', error)
+        })
+    }
+  }, [googleClientId])
 
   // Redirect to dashboard if already authenticated
   useEffect(() => {

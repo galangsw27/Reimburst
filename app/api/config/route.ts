@@ -13,5 +13,6 @@ export async function GET() {
     maxstreamWebhookUrl: process.env.NEXT_PUBLIC_MAXSTREAM_WEBHOOK_URL || '',
     myorbitWebhookUrl: process.env.NEXT_PUBLIC_MYORBIT_WEBHOOK_URL || '',
     duniagamesWebhookUrl: process.env.NEXT_PUBLIC_DUNIAGAMES_WEBHOOK_URL || '',
+    googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
   })
 }
