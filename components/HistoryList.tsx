@@ -14,10 +14,10 @@ import { googleSheetsService } from '@/lib/services/googleSheetsService'
 import { Reimbursement, ReimbursementStatus } from '@/lib/types'
 
 interface HistoryListProps {
-  showDownload?: boolean
+  // No props needed
 }
 
-export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }) => {
+export const HistoryList: React.FC<HistoryListProps> = () => {
   const { user } = useAuth()
   const { reimbursements, mounted } = useReimbursements()
   
@@ -30,16 +30,11 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
   const [isExporting, setIsExporting] = useState(false)
   const [exportMessage, setExportMessage] = useState<string>('')
 
-  // Get requests based on user role and showDownload flag
+  // Get requests based on user role
   const requests = useMemo(() => {
     if (!mounted || !user) return []
     
     let filtered = [...reimbursements]
-    
-    // Filter by approval status if showDownload is true
-    if (showDownload) {
-      filtered = filtered.filter(r => r.status === 'approved_by_finance')
-    }
     
     // Filter by user if regular user role
     if (user.role === 'user') {
@@ -50,7 +45,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
     return filtered.sort((a, b) => 
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     )
-  }, [reimbursements, user, mounted, showDownload])
+  }, [reimbursements, user, mounted])
 
   // Get unique projects from requests
   const projectsWithData = useMemo(() => {
@@ -191,15 +186,45 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
   }
 
   // Get status badge styling
-  const getStatusBadge = (status: ReimbursementStatus) => {
+  const getStatusBadge = (status: string) => {
     const badges = {
-      pending: { class: 'bg-yellow-500/20 text-yellow-500', icon: Clock },
-      approved_by_head: { class: 'bg-blue-500/20 text-blue-500', icon: CheckCircle },
-      approved_by_lead: { class: 'bg-blue-500/20 text-blue-500', icon: CheckCircle },
-      approved_by_finance: { class: 'bg-green-500/20 text-green-500', icon: CheckCircle },
-      rejected: { class: 'bg-red-500/20 text-red-500', icon: XCircle },
+      pending: 'bg-yellow-500/20 text-yellow-500',
+      approved_by_head: 'bg-blue-500/20 text-blue-500',
+      approved_by_lead: 'bg-blue-500/20 text-blue-500',
+      approved_by_finance: 'bg-green-500/20 text-green-500',
+      approved: 'bg-green-500/20 text-green-500', // Legacy support
+      rejected: 'bg-red-500/20 text-red-500'
     }
-    return badges[status] || badges.pending
+    return badges[status as keyof typeof badges] || badges.pending
+  }
+
+  // Get display status text
+  const getDisplayStatus = (request: Reimbursement): string => {
+    // Check if both head and lead approved
+    const headApproved = request.approvals?.head?.approved === true
+    const leadApproved = request.approvals?.lead?.approved === true
+    const financeApproved = request.approvals?.finance?.approved === true
+    
+    if (financeApproved) {
+      return 'APPROVED BY FINANCE'
+    }
+    
+    // If head approved, show APPROVED BY HEAD (regardless of lead status)
+    // Head is higher level than lead
+    if (headApproved) {
+      return 'APPROVED BY HEAD'
+    }
+    
+    // If only lead approved (head hasn't approved yet)
+    if (leadApproved && !headApproved) {
+      return 'APPROVED BY LEAD'
+    }
+    
+    if (request.status === 'rejected') {
+      return 'REJECTED'
+    }
+    
+    return 'PENDING'
   }
 
   // Don't render until mounted
@@ -213,17 +238,25 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>
-              {showDownload ? 'Approved Reimbursements' : 'History'} ({filteredRequests.length})
+              History ({filteredRequests.length})
             </CardTitle>
-            {showDownload && requests.length > 0 && (
-              <div className="flex gap-2">
-                <Button onClick={handleDownloadCSV} variant="outline" size="sm">
-                  <Download className="w-4 h-4" />
-                  Download CSV
-                </Button>
-              </div>
-            )}
           </div>
+          
+          {/* Finance Note for Download */}
+          {user?.role === 'finance' && (
+            <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Download className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-sm font-semibold text-blue-400 mb-1">Download Excel Report</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Untuk download report Excel, silakan <strong>filter project terlebih dahulu</strong>. 
+                    Button Export, Download, dan Open akan muncul setelah project dipilih.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Filters Section */}
           <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-4">
@@ -344,11 +377,25 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
             )}
           </div>
 
-          {/* Google Sheets Actions (for Download Excel view) */}
-          {showDownload && requests.length > 0 && projectFilter !== 'all' && (
-            <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-3">
-              <h4 className="text-sm font-semibold">Google Sheets Actions for {projectFilter}:</h4>
+          {/* Google Sheets Actions - Only show for Finance when project is selected */}
+          {user?.role === 'finance' && requests.length > 0 && projectFilter !== 'all' && (
+            <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-green-400" />
+                <h4 className="text-sm font-semibold text-green-400">Excel Export for {projectFilter}</h4>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Export data ke Google Sheets atau download sebagai Excel file
+              </p>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleDownloadCSV}
+                  variant="outline"
+                >
+                  <Download className="w-4 h-4" />
+                  Download CSV
+                </Button>
                 <Button
                   size="sm"
                   onClick={handleExportToGoogleSheets}
@@ -396,38 +443,36 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
             </div>
           )}
           
-          {!showDownload && (
-            <div className="flex gap-2 mt-4">
-              <Button
-                size="sm"
-                variant={filter === 'all' ? 'default' : 'outline'}
-                onClick={() => setFilter('all')}
-              >
-                All
-              </Button>
-              <Button
-                size="sm"
-                variant={filter === 'pending' ? 'default' : 'outline'}
-                onClick={() => setFilter('pending')}
-              >
-                Pending
-              </Button>
-              <Button
-                size="sm"
-                variant={filter === 'approved' ? 'default' : 'outline'}
-                onClick={() => setFilter('approved')}
-              >
-                Approved
-              </Button>
-              <Button
-                size="sm"
-                variant={filter === 'rejected' ? 'default' : 'outline'}
-                onClick={() => setFilter('rejected')}
-              >
-                Rejected
-              </Button>
-            </div>
-          )}
+          <div className="flex gap-2 mt-4">
+            <Button
+              size="sm"
+              variant={filter === 'all' ? 'default' : 'outline'}
+              onClick={() => setFilter('all')}
+            >
+              All
+            </Button>
+            <Button
+              size="sm"
+              variant={filter === 'pending' ? 'default' : 'outline'}
+              onClick={() => setFilter('pending')}
+            >
+              Pending
+            </Button>
+            <Button
+              size="sm"
+              variant={filter === 'approved' ? 'default' : 'outline'}
+              onClick={() => setFilter('approved')}
+            >
+              Approved
+            </Button>
+            <Button
+              size="sm"
+              variant={filter === 'rejected' ? 'default' : 'outline'}
+              onClick={() => setFilter('rejected')}
+            >
+              Rejected
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {filteredRequests.length === 0 ? (
@@ -438,8 +483,13 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
           ) : (
             <div className="space-y-4">
               {filteredRequests.map((request) => {
-                const statusInfo = getStatusBadge(request.status)
-                const StatusIcon = statusInfo.icon
+                const displayStatus = getDisplayStatus(request)
+                const statusClass = getStatusBadge(request.status)
+                
+                // Determine icon based on status
+                const StatusIcon = request.status === 'rejected' ? XCircle : 
+                                  request.status === 'approved_by_finance' || displayStatus.includes('FINANCE') ? CheckCircle :
+                                  request.status === 'pending' ? Clock : CheckCircle
                 
                 return (
                   <motion.div
@@ -461,9 +511,9 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
                           })}
                         </p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.class}`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusClass}`}>
                         <StatusIcon className="w-3 h-3" />
-                        {request.status.replace(/_/g, ' ').toUpperCase()}
+                        {displayStatus}
                       </span>
                     </div>
 
@@ -503,18 +553,72 @@ export const HistoryList: React.FC<HistoryListProps> = ({ showDownload = false }
                     </div>
 
                     {/* Approval Status */}
-                    <div className="flex gap-4 mb-4 text-xs">
-                      <div className={`flex items-center gap-1 ${request.approvals?.head ? 'text-green-500' : 'text-muted-foreground'}`}>
-                        {request.approvals?.head ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        Head: {request.approvals?.head?.by || 'Pending'}
-                      </div>
-                      <div className={`flex items-center gap-1 ${request.approvals?.lead ? 'text-green-500' : 'text-muted-foreground'}`}>
-                        {request.approvals?.lead ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        Lead: {request.approvals?.lead?.by || 'Pending'}
-                      </div>
-                      <div className={`flex items-center gap-1 ${request.approvals?.finance ? 'text-green-500' : 'text-muted-foreground'}`}>
-                        {request.approvals?.finance ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        Finance: {request.approvals?.finance?.by || 'Pending'}
+                    <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+                      <h4 className="text-xs font-semibold mb-2 text-muted-foreground">Approval Status:</h4>
+                      <div className="space-y-2">
+                        <div className={`flex items-center gap-2 text-sm ${
+                          request.approvals?.head?.approved ? 'text-green-500' : 
+                          request.approvals?.head?.approved === false ? 'text-red-500' : 
+                          'text-muted-foreground'
+                        }`}>
+                          {request.approvals?.head?.approved ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : request.approvals?.head?.approved === false ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
+                          <span className="font-medium">Head:</span>
+                          <span>
+                            {request.approvals?.head?.approved 
+                              ? `✓ Approved by ${request.approvals.head.by}` 
+                              : request.approvals?.head?.approved === false 
+                                ? `✗ Rejected by ${request.approvals.head.by}` 
+                                : 'Pending'}
+                          </span>
+                        </div>
+                        <div className={`flex items-center gap-2 text-sm ${
+                          request.approvals?.lead?.approved ? 'text-green-500' : 
+                          request.approvals?.lead?.approved === false ? 'text-red-500' : 
+                          'text-muted-foreground'
+                        }`}>
+                          {request.approvals?.lead?.approved ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : request.approvals?.lead?.approved === false ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
+                          <span className="font-medium">Lead:</span>
+                          <span>
+                            {request.approvals?.lead?.approved 
+                              ? `✓ Approved by ${request.approvals.lead.by}` 
+                              : request.approvals?.lead?.approved === false 
+                                ? `✗ Rejected by ${request.approvals.lead.by}` 
+                                : 'Pending'}
+                          </span>
+                        </div>
+                        <div className={`flex items-center gap-2 text-sm ${
+                          request.approvals?.finance?.approved ? 'text-green-500' : 
+                          request.approvals?.finance?.approved === false ? 'text-red-500' : 
+                          'text-muted-foreground'
+                        }`}>
+                          {request.approvals?.finance?.approved ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : request.approvals?.finance?.approved === false ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
+                          <span className="font-medium">Finance:</span>
+                          <span>
+                            {request.approvals?.finance?.approved 
+                              ? `✓ Approved by ${request.approvals.finance.by}` 
+                              : request.approvals?.finance?.approved === false 
+                                ? `✗ Rejected by ${request.approvals.finance.by}` 
+                                : 'Pending'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 

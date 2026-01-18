@@ -81,12 +81,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
     setError(null)
 
     try {
-      // Convert to base64 for preview and webhook
+      // Convert to base64 for preview only
       const base64Image = await convertToBase64(file)
       setPreviewUrl(base64Image)
 
-      // Process receipt with OCR webhook
-      const ocrResponse = await reimbursementService.processReceipt(base64Image)
+      // Process receipt with OCR webhook - send file directly
+      const ocrResponse = await reimbursementService.processReceipt(file)
 
       if (!ocrResponse.success || !ocrResponse.data) {
         throw new Error(ocrResponse.error || 'OCR processing failed')

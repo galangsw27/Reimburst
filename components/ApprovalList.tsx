@@ -195,16 +195,14 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
       
       if (role === 'head') {
         newApprovals.head = approval
-        // Check if lead also approved
-        if (newApprovals.lead) {
-          newStatus = 'approved_by_lead'
-        } else {
-          newStatus = 'approved_by_head'
-        }
+        // Head approval always sets status to approved_by_head
+        // This indicates head has approved (regardless of lead status)
+        newStatus = 'approved_by_head'
       } else if (role === 'lead') {
         newApprovals.lead = approval
-        // Check if head also approved
-        if (newApprovals.head) {
+        // If head already approved, keep status as approved_by_head
+        // Otherwise set to approved_by_lead
+        if (newApprovals.head?.approved) {
           newStatus = 'approved_by_head'
         } else {
           newStatus = 'approved_by_lead'

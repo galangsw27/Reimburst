@@ -13,6 +13,8 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['@radix-ui/react-icons'],
   },
+  // Enable standalone output for Docker
+  output: 'standalone',
 }
 
 export default nextConfig

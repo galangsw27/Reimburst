@@ -8,6 +8,10 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_MAXSTREAM_WEBHOOK_URL = 'https://test.com/webhook/maxstream'
   process.env.NEXT_PUBLIC_MYORBIT_WEBHOOK_URL = 'https://test.com/webhook/myorbit'
   process.env.NEXT_PUBLIC_DUNIAGAMES_WEBHOOK_URL = 'https://test.com/webhook/duniagames'
+  
+  // Database configuration for tests
+  process.env.DATABASE_MODE = 'database'
+  process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/reimbursement_db'
 })
 
 afterEach(() => {

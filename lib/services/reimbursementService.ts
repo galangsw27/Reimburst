@@ -16,16 +16,16 @@ import { Reimbursement, ReimbursementStatus, OCRResponse, AssetMatchResponse } f
 /**
  * Process a receipt image using the OCR webhook
  * 
- * Sends the base64-encoded image to the n8n OCR webhook for AI processing.
+ * Sends the image file directly to the n8n OCR webhook for AI processing.
  * The webhook extracts information like amount, date, description, and merchant.
  * 
- * @param imageBase64 - Base64-encoded receipt image
+ * @param file - Image file to process
  * @returns OCR processing result with extracted data
  * @throws Error if webhook call fails or returns error
  * 
  * Requirements: 7.1 - OCR Service integration
  */
-export async function processReceipt(imageBase64: string): Promise<OCRResponse> {
+export async function processReceipt(file: File): Promise<OCRResponse> {
   try {
     const webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_URL
     
@@ -33,8 +33,14 @@ export async function processReceipt(imageBase64: string): Promise<OCRResponse> 
       throw new Error('NEXT_PUBLIC_WEBHOOK_URL is not configured')
     }
     
-    const response = await axios.post(webhookUrl, {
-      image: imageBase64,
+    // Create FormData to send file directly
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await axios.post(webhookUrl, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     })
     
     return {
