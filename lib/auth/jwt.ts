@@ -5,12 +5,12 @@
  * for API authentication and authorization.
  */
 
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { User } from '@/lib/types';
 
 // JWT secret from environment variable or default for development
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // 7 days default
+const JWT_SECRET: string = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d'; // 7 days default
 
 export interface JWTPayload {
   userId: string;
@@ -33,9 +33,10 @@ export function generateToken(user: User): string {
     role: user.role,
   };
 
+  // Use type assertion to handle the expiresIn type
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
-  });
+  } as jwt.SignOptions);
 }
 
 /**
