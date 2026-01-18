@@ -249,19 +249,19 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
         timestamp: new Date().toISOString()
       })
       
-      const data = response.data
-      const isMSISDN = /^(\+62|62|0)8[1-9][0-9]{6,9}$/.test(request.employeeEmail)
+      // Response structure: { data: { matched, assetId, assetName, ... } }
+      const data = response.data.data || response.data
       
       const matchResult: AssetMatchResult = {
         matched: data.matched || false,
-        assetId: data.asset_id || undefined,
-        assetName: data.asset_name || undefined,
-        employeeName: data.employee_name || undefined,
+        assetId: data.assetId || undefined,
+        assetName: data.assetName || undefined,
+        employeeName: data.employeeName || undefined,
         department: data.department || undefined,
-        matchedBy: isMSISDN ? 'msisdn' : 'email',
-        matchedValue: request.employeeEmail,
+        matchedBy: data.matchedBy || 'email',
+        matchedValue: data.matchedValue || request.employeeEmail,
         confidence: data.confidence || 0,
-        verifiedDate: new Date().toISOString()
+        verifiedDate: data.verifiedDate || new Date().toISOString()
       }
       
       setAssetMatchResult(matchResult)
