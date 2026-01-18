@@ -52,3 +52,10 @@ coverage/
 *.test.ts
 *.spec.tsx
 *.spec.ts
+
+# Test pages (development only)
+app/test-auth/
+app/test-auth-service/
+app/test-localstorage/
+app/test-reimbursements/
+app/test-ui-components/
