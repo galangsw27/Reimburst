@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, CheckCircle2, AlertCircle, Loader2, Send, X } from 'lucide-react'
+import { Upload, CheckCircle2, AlertCircle, Loader2, Send, X, Database } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useReimbursements } from '@/lib/hooks/useReimbursements'
 import { useAuth } from '@/providers/AuthProvider'
 import { reimbursementService } from '@/lib/services/reimbursementService'
-import { ReimbursementData, AppState, ProjectType } from '@/lib/types'
+import { ReimbursementData, AppState, ProjectType, AssetMatchResult } from '@/lib/types'
+import axios from 'axios'
 
 interface UploadFormProps {
   onSuccess: () => void
@@ -33,6 +34,8 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showImageModal, setShowImageModal] = useState(false)
+  const [isCheckingAsset, setIsCheckingAsset] = useState(false)
+  const [assetCheckResult, setAssetCheckResult] = useState<AssetMatchResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Image file validation
@@ -295,6 +298,63 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
     }
   }
 
+  const handleCheckAsset = async () => {
+    if (!data.msisdnEmail) {
+      setError('Masukkan MSISDN/Email terlebih dahulu')
+      return
+    }
+
+    setIsCheckingAsset(true)
+    setError(null)
+    
+    try {
+      // Try to get webhook URL from build-time env first
+      let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
+      
+      // If not available at build time, try runtime config
+      if (!webhookUrl) {
+        try {
+          const configResponse = await axios.get('/api/config')
+          webhookUrl = configResponse.data.assetMatchWebhookUrl
+        } catch (configError) {
+          console.error('Failed to load runtime config:', configError)
+        }
+      }
+      
+      if (!webhookUrl) {
+        throw new Error('Asset matching webhook URL tidak dikonfigurasi. Hubungi administrator.')
+      }
+      
+      const response = await axios.post(webhookUrl, {
+        msisdn_email: data.msisdnEmail,
+        timestamp: new Date().toISOString()
+      })
+      
+      // Response structure: { data: { matched, assetId, assetName, ... } }
+      const responseData = response.data.data || response.data
+      
+      const matchResult: AssetMatchResult = {
+        matched: responseData.matched || false,
+        assetId: responseData.assetId || undefined,
+        assetName: responseData.assetName || undefined,
+        employeeName: responseData.employeeName || undefined,
+        department: responseData.department || undefined,
+        matchedBy: responseData.matchedBy || 'email',
+        matchedValue: responseData.matchedValue || data.msisdnEmail,
+        confidence: responseData.confidence || 0,
+        verifiedDate: responseData.verifiedDate || new Date().toISOString()
+      }
+      
+      setAssetCheckResult(matchResult)
+    } catch (err) {
+      console.error('Asset check error:', err)
+      setError('Gagal melakukan asset matching. Silakan coba lagi.')
+      setAssetCheckResult(null)
+    } finally {
+      setIsCheckingAsset(false)
+    }
+  }
+
   const reset = () => {
     setState('upload')
     setPreviewUrl(null)
@@ -307,6 +367,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
       loginStatus: 'Login', total: 0, by: '', remark: ''
     })
     setError(null)
+    setAssetCheckResult(null)
   }
 
   if (!user) {
@@ -342,6 +403,128 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
                     <p className="font-medium text-white">{user.leadName || '-'}</p>
                   </div>
                 </div>
+              </div>
+
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-primary">Informasi Pengaju</h3>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleCheckAsset}
+                    disabled={isCheckingAsset || !data.msisdnEmail}
+                  >
+                    {isCheckingAsset ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Checking...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="w-4 h-4 mr-2" />
+                        Check Asset
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Nama <span className="text-red-500">*</span>
+                    </Label>
+                    <Input 
+                      value={data.nama} 
+                      onChange={e => setData({ ...data, nama: e.target.value })}
+                      placeholder="Masukkan nama lengkap"
+                      required
+                      className="bg-background"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      MSISDN / Email <span className="text-red-500">*</span>
+                    </Label>
+                    <Input 
+                      value={data.msisdnEmail} 
+                      onChange={e => {
+                        setData({ ...data, msisdnEmail: e.target.value })
+                        setAssetCheckResult(null)
+                      }}
+                      placeholder="08123456789 atau email@company.com"
+                      required
+                      className="bg-background"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Akan digunakan untuk matching dengan database asset
+                    </p>
+                  </div>
+                </div>
+                
+                {assetCheckResult && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-4 p-3 rounded-lg border"
+                    style={{
+                      backgroundColor: assetCheckResult.matched ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                      borderColor: assetCheckResult.matched ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'
+                    }}
+                  >
+                    {assetCheckResult.matched ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-green-500 text-sm font-medium">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Match Found!
+                          {assetCheckResult.confidence && (
+                            <span className="text-xs bg-green-500/20 px-2 py-1 rounded">
+                              {(assetCheckResult.confidence * 100).toFixed(0)}% confidence
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Asset ID:</span>
+                            <p className="font-medium">{assetCheckResult.assetId}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Asset Name:</span>
+                            <p className="font-medium">{assetCheckResult.assetName}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Employee:</span>
+                            <p className="font-medium">{assetCheckResult.employeeName}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Department:</span>
+                            <p className="font-medium">{assetCheckResult.department}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Matched By:</span>
+                            <p className="font-medium capitalize">{assetCheckResult.matchedBy}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Matched Value:</span>
+                            <p className="font-medium">{assetCheckResult.matchedValue}</p>
+                          </div>
+                        </div>
+                        <div className="mt-2 p-2 bg-green-500/10 border border-green-500/30 rounded text-xs text-green-600">
+                          ✓ Asset verified. Anda dapat melanjutkan upload struk.
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-yellow-600 text-sm">
+                          <AlertCircle className="w-4 h-4" />
+                          No matching asset found in database
+                        </div>
+                        <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-600">
+                          ⚠ No asset match found. Anda masih dapat melanjutkan jika diperlukan.
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -413,7 +596,25 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                  <h3 className="text-sm font-semibold mb-4 text-primary">Informasi Pengaju</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-primary">Informasi Pengaju</h3>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleCheckAsset}
+                      disabled={isCheckingAsset || !data.msisdnEmail}
+                    >
+                      {isCheckingAsset ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        'Check Asset'
+                      )}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
@@ -433,7 +634,10 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
                       </Label>
                       <Input 
                         value={data.msisdnEmail} 
-                        onChange={e => setData({ ...data, msisdnEmail: e.target.value })}
+                        onChange={e => {
+                          setData({ ...data, msisdnEmail: e.target.value })
+                          setAssetCheckResult(null)
+                        }}
                         placeholder="08123456789 atau email@company.com"
                         required
                         className="bg-background"
@@ -443,6 +647,42 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
                       </p>
                     </div>
                   </div>
+                  
+                  {assetCheckResult && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="mt-4 p-3 rounded-lg border"
+                      style={{
+                        backgroundColor: assetCheckResult.matched ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                        borderColor: assetCheckResult.matched ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'
+                      }}
+                    >
+                      {assetCheckResult.matched ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-green-500 text-sm font-medium">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Asset Ditemukan!
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Asset:</span>
+                              <p className="font-medium">{assetCheckResult.assetName}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Employee:</span>
+                              <p className="font-medium">{assetCheckResult.employeeName}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-yellow-600 text-sm">
+                          <AlertCircle className="w-4 h-4" />
+                          Asset tidak ditemukan di database
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
                 </div>
 
                 <div>

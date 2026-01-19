@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { UploadForm } from '@/components/UploadForm'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -12,15 +13,17 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Upload Reimbursement</h1>
-          <p className="text-muted-foreground">Upload struk dan ajukan reimbursement Anda</p>
+    <ProtectedRoute>
+      <div className="min-h-screen bg-background p-4 md:p-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Upload Reimbursement</h1>
+            <p className="text-muted-foreground">Upload struk dan ajukan reimbursement Anda</p>
+          </div>
+          
+          <UploadForm onSuccess={handleSuccess} />
         </div>
-        
-        <UploadForm onSuccess={handleSuccess} />
       </div>
-    </div>
+    </ProtectedRoute>
   )
 }

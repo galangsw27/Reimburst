@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { CheckCircle, XCircle, Eye, Clock, Loader2, Database, AlertCircle, Filter, Calendar, X } from 'lucide-react'
 import { Button } from './ui/button'
@@ -25,6 +25,8 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
   const [comment, setComment] = useState('')
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectModal, setShowRejectModal] = useState(false)
+  const [showApproveModal, setShowApproveModal] = useState(false)
+  const [pendingApprovalRequest, setPendingApprovalRequest] = useState<Reimbursement | null>(null)
   const [isMatchingAsset, setIsMatchingAsset] = useState(false)
   const [assetMatchResult, setAssetMatchResult] = useState<AssetMatchResult | null>(null)
   const [checkedRequests, setCheckedRequests] = useState<Set<string>>(new Set())
@@ -129,10 +131,17 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
   }, [sortedRequests, projectFilter, leadFilter, dateFrom, dateTo])
 
 
+  // Show approve confirmation modal
+  const showApproveConfirmation = (request: Reimbursement) => {
+    setPendingApprovalRequest(request)
+    setShowApproveModal(true)
+  }
+
   // Handle approve action
   const handleApprove = async (requestId: string) => {
     if (!user) return
     
+    setShowApproveModal(false)
     const role = user.role
     
     // For finance, check if asset matching has been done
@@ -272,6 +281,12 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
     } finally {
       setIsMatchingAsset(false)
     }
+  }
+
+  // Show reject confirmation modal
+  const showRejectConfirmation = (request: Reimbursement) => {
+    setSelectedRequest(request)
+    setShowRejectModal(true)
   }
 
   // Handle reject action
@@ -565,7 +580,7 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                     <Button
                       size="sm"
                       variant="default"
-                      onClick={() => handleApprove(request.id)}
+                      onClick={() => showApproveConfirmation(request)}
                       disabled={
                         isMatchingAsset || 
                         (user.role === 'finance' && !checkedRequests.has(request.id))
@@ -582,10 +597,7 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => {
-                        setSelectedRequest(request)
-                        setShowRejectModal(true)
-                      }}
+                      onClick={() => showRejectConfirmation(request)}
                       disabled={isMatchingAsset}
                     >
                       <XCircle className="w-4 h-4" />
@@ -692,6 +704,67 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
       </Card>
 
 
+      {/* Approve Confirmation Modal */}
+      {showApproveModal && pendingApprovalRequest && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setShowApproveModal(false)}
+        >
+          <motion.div
+            className="bg-background border border-border rounded-lg p-6 max-w-lg w-full"
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <CheckCircle className="w-6 h-6 text-green-500" />
+              Konfirmasi Approve
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              Apakah Anda yakin ingin approve reimbursement ini?
+            </p>
+            <div className="space-y-3 mb-6 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Request ID:</span>
+                  <p className="font-medium">{pendingApprovalRequest.id}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Nama:</span>
+                  <p className="font-medium">{pendingApprovalRequest.employeeName}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">MSISDN/Email:</span>
+                  <p className="font-medium">{pendingApprovalRequest.employeeEmail}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Amount:</span>
+                  <p className="font-medium">Rp {pendingApprovalRequest.amount.toLocaleString('id-ID')}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Deskripsi:</span>
+                  <p className="font-medium">{pendingApprovalRequest.description}</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowApproveModal(false)} className="flex-1">
+                Tidak
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => handleApprove(pendingApprovalRequest.id)}
+                className="flex-1"
+              >
+                Ya, Approve
+              </Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
       {/* Reject Modal */}
       {showRejectModal && selectedRequest && (
         <motion.div
@@ -701,17 +774,44 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
           onClick={() => setShowRejectModal(false)}
         >
           <motion.div
-            className="bg-background border border-border rounded-lg p-6 max-w-md w-full"
+            className="bg-background border border-border rounded-lg p-6 max-w-lg w-full"
             initial={{ scale: 0.9 }}
             animate={{ scale: 1 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-xl font-bold mb-4">Reject Reimbursement</h3>
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <XCircle className="w-6 h-6 text-red-500" />
+              Konfirmasi Reject
+            </h3>
             <p className="text-muted-foreground mb-4">
-              Request ID: {selectedRequest.id}
+              Apakah Anda yakin ingin reject reimbursement ini?
             </p>
+            <div className="space-y-3 mb-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Request ID:</span>
+                  <p className="font-medium">{selectedRequest.id}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Nama:</span>
+                  <p className="font-medium">{selectedRequest.employeeName}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">MSISDN/Email:</span>
+                  <p className="font-medium">{selectedRequest.employeeEmail}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Amount:</span>
+                  <p className="font-medium">Rp {selectedRequest.amount.toLocaleString('id-ID')}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Deskripsi:</span>
+                  <p className="font-medium">{selectedRequest.description}</p>
+                </div>
+              </div>
+            </div>
             <div className="space-y-2 mb-4">
-              <Label>Alasan Penolakan</Label>
+              <Label>Alasan Penolakan <span className="text-red-500">*</span></Label>
               <Input
                 placeholder="Masukkan alasan penolakan..."
                 value={rejectReason}
@@ -719,15 +819,16 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
               />
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowRejectModal(false)}>
-                Batal
+              <Button variant="outline" onClick={() => setShowRejectModal(false)} className="flex-1">
+                Tidak
               </Button>
               <Button
                 variant="destructive"
                 onClick={() => handleReject(selectedRequest.id)}
                 disabled={!rejectReason.trim()}
+                className="flex-1"
               >
-                Reject
+                Ya, Reject
               </Button>
             </div>
           </motion.div>

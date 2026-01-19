@@ -60,3 +60,5 @@ app/test-auth-service/
 app/test-localstorage/
 app/test-reimbursements/
 app/test-ui-components/
+n8n*
+supabase*
