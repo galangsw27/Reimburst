@@ -13,27 +13,27 @@
 
 -- Insert Lead users (password: password123)
 INSERT INTO users (id, email, name, password_hash, role, status, lead_id) VALUES
-(1, 'john.lead@airism.com', 'John Lead', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'lead', 'ACTIVE', NULL),
-(2, 'sarah.lead@airism.com', 'Sarah Lead', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'lead', 'ACTIVE', NULL)
+(1, 'john.lead@airism.com', 'John Lead', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'lead', 'ACTIVE', NULL),
+(2, 'sarah.lead@airism.com', 'Sarah Lead', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'lead', 'ACTIVE', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Head user (password: password123)
 INSERT INTO users (id, email, name, password_hash, role, status, lead_id) VALUES
-(3, 'michael.head@airism.com', 'Michael Head', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'head', 'ACTIVE', NULL)
+(3, 'michael.head@airism.com', 'Michael Head', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'head', 'ACTIVE', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Finance user (password: password123)
 INSERT INTO users (id, email, name, password_hash, role, status, lead_id) VALUES
-(4, 'lisa.finance@airism.com', 'Lisa Finance', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'finance', 'ACTIVE', NULL)
+(4, 'lisa.finance@airism.com', 'Lisa Finance', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'finance', 'ACTIVE', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Tester users (assigned to leads) (password: password123)
 INSERT INTO users (id, email, name, password_hash, role, status, lead_id) VALUES
-(5, 'alice.tester@airism.com', 'Alice Tester', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'tester', 'ACTIVE', 1),
-(6, 'bob.tester@airism.com', 'Bob Tester', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'tester', 'ACTIVE', 1),
-(7, 'charlie.tester@airism.com', 'Charlie Tester', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'tester', 'ACTIVE', 2),
-(8, 'diana.tester@airism.com', 'Diana Tester', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'tester', 'ACTIVE', 2),
-(9, 'evan.tester@airism.com', 'Evan Tester', '$2a$10$rZ5YhJKvXqKqKqKqKqKqKuXqKqKqKqKqKqKqKqKqKqKqKqKqK', 'tester', 'ACTIVE', 1)
+(5, 'alice.tester@airism.com', 'Alice Tester', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'tester', 'ACTIVE', 1),
+(6, 'bob.tester@airism.com', 'Bob Tester', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'tester', 'ACTIVE', 1),
+(7, 'charlie.tester@airism.com', 'Charlie Tester', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'tester', 'ACTIVE', 2),
+(8, 'diana.tester@airism.com', 'Diana Tester', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'tester', 'ACTIVE', 2),
+(9, 'evan.tester@airism.com', 'Evan Tester', 'f1e2d3c4b5a69788:ef162fd0a15b21b1f57449084bd2e294d4b4848f2a463d7ef2187523be85ccaa0ae8a3ec886364f46d5aa27a623b59c441e4c81ffd0f50ea0bd8b9513d16baeb', 'tester', 'ACTIVE', 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================
