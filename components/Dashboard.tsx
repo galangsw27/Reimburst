@@ -1,15 +1,17 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Clock, XCircle, DollarSign, FileText, Filter, ArrowUpDown, CheckCircle, Upload } from 'lucide-react'
+import { Clock, XCircle, DollarSign, FileText, Filter, ArrowUpDown, CheckCircle, Upload, BarChart3, Users, Building } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { useAuth } from '@/providers/AuthProvider'
 import { useReimbursements } from '@/lib/hooks/useReimbursements'
-import { Reimbursement, ProjectType, ReimbursementStatus } from '@/lib/types'
+import { useProjects } from '@/lib/hooks/useProjects'
+import { ProjectType, ReimbursementStatus } from '@/lib/types'
 import { useRouter } from 'next/navigation'
+import { hasPermission } from '@/lib/utils/permissions'
 
 type DashboardView = 'overview' | 'upload' | 'approval' | 'history' | 'download'
 
@@ -20,6 +22,9 @@ interface DashboardStats {
   rejected: number
   totalAmount: number
   byProject: Record<string, { count: number; total: number }>
+  // New statistics for enhanced features
+  totalProjects: number
+  activeProjects: number
 }
 
 type SortField = 'date' | 'amount' | 'status' | 'project'
@@ -29,6 +34,7 @@ export default function Dashboard() {
   const { user } = useAuth()
   const router = useRouter()
   const { reimbursements, mounted } = useReimbursements()
+  const { projects, activeProjects, mounted: projectsMounted } = useProjects()
   
   const [view] = useState<DashboardView>('overview')
   const [filterStatus, setFilterStatus] = useState<ReimbursementStatus | 'all'>('all')
@@ -46,15 +52,17 @@ export default function Dashboard() {
         rejected: 0,
         totalAmount: 0,
         byProject: {},
+        totalProjects: 0,
+        activeProjects: 0,
       }
     }
 
     // Filter reimbursements by user if they're a regular user
-    const userReimbursements = user.role === 'user' 
+    const userReimbursements = user.role === 'tester' 
       ? reimbursements.filter(r => r.userId === user.id)
       : reimbursements
 
-    // Calculate statistics
+    // Calculate reimbursement statistics
     const totalRequests = userReimbursements.length
     const pendingApproval = userReimbursements.filter(
       r => r.status === 'pending' || 
@@ -76,6 +84,10 @@ export default function Dashboard() {
       byProject[project].total += r.amount
     })
 
+    // Calculate project statistics
+    const totalProjects = projectsMounted ? projects.length : 0
+    const activeProjectsCount = projectsMounted ? activeProjects.length : 0
+
     return {
       totalRequests,
       pendingApproval,
@@ -83,8 +95,10 @@ export default function Dashboard() {
       rejected,
       totalAmount,
       byProject,
+      totalProjects,
+      activeProjects: activeProjectsCount,
     }
-  }, [reimbursements, user, mounted])
+  }, [reimbursements, user, mounted, projects, activeProjects, projectsMounted])
 
   // Filter and sort reimbursements
   const filteredAndSortedReimbursements = useMemo(() => {
@@ -93,7 +107,7 @@ export default function Dashboard() {
     let filtered = [...reimbursements]
 
     // Apply user filter for regular users
-    if (user?.role === 'user') {
+    if (user?.role === 'tester') {
       filtered = filtered.filter(r => r.userId === user.id)
     }
 
@@ -135,7 +149,7 @@ export default function Dashboard() {
   const getRoleTitle = () => {
     if (!user) return 'Dashboard'
     switch (user.role) {
-      case 'user': return 'User Dashboard'
+      case 'tester': return 'Tester Dashboard'
       case 'head': return 'Head Dashboard'
       case 'lead': return 'Lead Dashboard'
       case 'finance': return 'Finance Dashboard'
@@ -168,9 +182,11 @@ export default function Dashboard() {
     )
   }
 
-  const canUpload = ['user', 'head', 'lead'].includes(user.role)
-  const canApprove = ['head', 'lead', 'finance'].includes(user.role)
-  const canDownload = user.role === 'finance'
+  const canUpload = hasPermission(user, 'reimbursement.create')
+  const canApprove = hasPermission(user, 'approval.level1') || hasPermission(user, 'approval.level2') || hasPermission(user, 'approval.final')
+  const canAccessReports = hasPermission(user, 'report.read')
+  const canManageUsers = hasPermission(user, 'user.read')
+  const canManageProjects = hasPermission(user, 'project.read')
 
   return (
     <div className="min-h-screen p-6">
@@ -236,6 +252,24 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
+              {/* New Project Statistics - Only visible to users who can manage projects */}
+              {canManageProjects && (
+                <>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
+                      <Building className="w-4 h-4 text-blue-500" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-blue-500">{stats.totalProjects}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {stats.activeProjects} active
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+
               <Card className="md:col-span-2 lg:col-span-4">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
@@ -248,6 +282,98 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {canUpload && (
+                    <Button
+                      variant="outline"
+                      className="h-auto p-4 flex flex-col items-center gap-2"
+                      onClick={() => handleNavigation('/upload')}
+                    >
+                      <Upload className="w-6 h-6 text-primary" />
+                      <div className="text-center">
+                        <div className="font-medium">Upload Request</div>
+                        <div className="text-xs text-muted-foreground">Submit new reimbursement</div>
+                      </div>
+                    </Button>
+                  )}
+
+                  {canApprove && (
+                    <Button
+                      variant="outline"
+                      className="h-auto p-4 flex flex-col items-center gap-2"
+                      onClick={() => handleNavigation('/approvals')}
+                    >
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                      <div className="text-center">
+                        <div className="font-medium">Approvals</div>
+                        <div className="text-xs text-muted-foreground">Review pending requests</div>
+                      </div>
+                    </Button>
+                  )}
+
+                  {canAccessReports && (
+                    <Button
+                      variant="outline"
+                      className="h-auto p-4 flex flex-col items-center gap-2"
+                      onClick={() => handleNavigation('/reports')}
+                    >
+                      <BarChart3 className="w-6 h-6 text-blue-600" />
+                      <div className="text-center">
+                        <div className="font-medium">Reports</div>
+                        <div className="text-xs text-muted-foreground">Generate & download reports</div>
+                      </div>
+                    </Button>
+                  )}
+
+                  {canManageUsers && (
+                    <Button
+                      variant="outline"
+                      className="h-auto p-4 flex flex-col items-center gap-2"
+                      onClick={() => handleNavigation('/users')}
+                    >
+                      <Users className="w-6 h-6 text-purple-600" />
+                      <div className="text-center">
+                        <div className="font-medium">Manage Users</div>
+                        <div className="text-xs text-muted-foreground">User & role management</div>
+                      </div>
+                    </Button>
+                  )}
+
+                  {canManageProjects && (
+                    <Button
+                      variant="outline"
+                      className="h-auto p-4 flex flex-col items-center gap-2"
+                      onClick={() => handleNavigation('/projects')}
+                    >
+                      <Building className="w-6 h-6 text-orange-600" />
+                      <div className="text-center">
+                        <div className="font-medium">Manage Projects</div>
+                        <div className="text-xs text-muted-foreground">Project configuration</div>
+                      </div>
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className="h-auto p-4 flex flex-col items-center gap-2"
+                    onClick={() => handleNavigation('/history')}
+                  >
+                    <FileText className="w-6 h-6 text-gray-600" />
+                    <div className="text-center">
+                      <div className="font-medium">History</div>
+                      <div className="text-xs text-muted-foreground">View all requests</div>
+                    </div>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Project Grouping */}
             {Object.keys(stats.byProject).length > 0 && (

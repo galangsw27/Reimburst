@@ -9,11 +9,14 @@
  * - Parameterized queries to prevent SQL injection
  * - Optional filtering by userId, status, date range, and amount range
  * - Validation for amount and status updates
+ * - Enhanced validation with Project and Asset services integration
+ * - Date validation logic (asset date vs transaction date)
+ * - Project and asset reference validation
  * 
- * Requirements: 7.4, 9.3
+ * Requirements: 7.4, 9.3, 3.2
  */
 
-import { Reimbursement } from '@/lib/types';
+import { Reimbursement, ReimbursementStatus } from '@/lib/types';
 import {
   IReimbursementService,
   CreateReimbursementInput,
@@ -21,18 +24,29 @@ import {
   ReimbursementFilters,
 } from '../types';
 import { db } from '@/lib/database/connection';
+import { DatabaseProjectService } from './projectService';
+import { DatabaseAssetService } from './assetService';
 
 /**
  * DatabaseReimbursementService implements IReimbursementService using PostgreSQL database.
  * 
  * This service executes SQL queries against the reimbursements table and handles
  * data transformation to match the Reimbursement interface format.
+ * Enhanced with validation logic for projects, assets, and date validation.
  * 
  * Requirements:
  * - 7.4: Implement Database_Service that queries PostgreSQL
  * - 9.3: Return reimbursement objects matching the existing mock data structure
+ * - 3.2: Implement date validation logic (asset date vs transaction date)
  */
 export class DatabaseReimbursementService implements IReimbursementService {
+  private projectService: DatabaseProjectService;
+  private assetService: DatabaseAssetService;
+
+  constructor() {
+    this.projectService = new DatabaseProjectService();
+    this.assetService = new DatabaseAssetService();
+  }
   /**
    * Retrieve reimbursements with optional filtering
    * 
@@ -68,7 +82,18 @@ export class DatabaseReimbursementService implements IReimbursementService {
         r.created_at as "createdAt",
         r.updated_at as "updatedAt",
         COALESCE(r.lead_id::text, u.lead_id::text) as "leadId",
-        COALESCE(r.lead_name, l.name) as "leadName"
+        COALESCE(r.lead_name, l.name) as "leadName",
+        r.transaction_id as "transactionId",
+        r.transaction_time as "transactionTime",
+        r.payment_method as "paymentMethod",
+        r.transaction_amount as "transactionAmount",
+        r.admin_fee as "adminFee",
+        r.shipping_fee as "shippingFee",
+        r.service_fee as "serviceFee",
+        r.discount,
+        r.login_status as "loginStatus",
+        r.by,
+        r.folder_evidence as "folderEvidence"
       FROM reimbursements r
       INNER JOIN users u ON r.user_id = u.id
       LEFT JOIN users l ON COALESCE(r.lead_id, u.lead_id) = l.id
@@ -146,7 +171,19 @@ export class DatabaseReimbursementService implements IReimbursementService {
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
       leadId: row.leadId,
       leadName: row.leadName,
-    }));
+      // Additional transaction details
+      transactionId: row.transactionId,
+      transactionTime: row.transactionTime,
+      paymentMethod: row.paymentMethod,
+      transactionAmount: row.transactionAmount ? parseFloat(row.transactionAmount) : undefined,
+      adminFee: row.adminFee ? parseFloat(row.adminFee) : 0,
+      shippingFee: row.shippingFee ? parseFloat(row.shippingFee) : 0,
+      serviceFee: row.serviceFee ? parseFloat(row.serviceFee) : 0,
+      discount: row.discount ? parseFloat(row.discount) : 0,
+      loginStatus: row.loginStatus,
+      by: row.by,
+      folderEvidence: row.folderEvidence,
+    } as any));
   }
 
   /**
@@ -182,7 +219,18 @@ export class DatabaseReimbursementService implements IReimbursementService {
         r.created_at as "createdAt",
         r.updated_at as "updatedAt",
         COALESCE(r.lead_id::text, u.lead_id::text) as "leadId",
-        COALESCE(r.lead_name, l.name) as "leadName"
+        COALESCE(r.lead_name, l.name) as "leadName",
+        r.transaction_id as "transactionId",
+        r.transaction_time as "transactionTime",
+        r.payment_method as "paymentMethod",
+        r.transaction_amount as "transactionAmount",
+        r.admin_fee as "adminFee",
+        r.shipping_fee as "shippingFee",
+        r.service_fee as "serviceFee",
+        r.discount,
+        r.login_status as "loginStatus",
+        r.by,
+        r.folder_evidence as "folderEvidence"
       FROM reimbursements r
       INNER JOIN users u ON r.user_id = u.id
       LEFT JOIN users l ON COALESCE(r.lead_id, u.lead_id) = l.id
@@ -214,13 +262,26 @@ export class DatabaseReimbursementService implements IReimbursementService {
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
       leadId: row.leadId,
       leadName: row.leadName,
-    };
+      // Additional transaction details
+      transactionId: row.transactionId,
+      transactionTime: row.transactionTime,
+      paymentMethod: row.paymentMethod,
+      transactionAmount: row.transactionAmount ? parseFloat(row.transactionAmount) : undefined,
+      adminFee: row.adminFee ? parseFloat(row.adminFee) : 0,
+      shippingFee: row.shippingFee ? parseFloat(row.shippingFee) : 0,
+      serviceFee: row.serviceFee ? parseFloat(row.serviceFee) : 0,
+      discount: row.discount ? parseFloat(row.discount) : 0,
+      loginStatus: row.loginStatus,
+      by: row.by,
+      folderEvidence: row.folderEvidence,
+    } as any;
   }
 
   /**
    * Create a new reimbursement
    * 
    * Validates that amount is positive before inserting.
+   * Enhanced with project and asset validation.
    * Uses parameterized query to prevent SQL injection.
    * 
    * @param data - The reimbursement data to create
@@ -230,6 +291,9 @@ export class DatabaseReimbursementService implements IReimbursementService {
    * Requirements:
    * - 7.4: Implement createReimbursement with validation
    * - 9.3: Return reimbursement object matching the expected structure
+   * - 3.2: Implement date validation logic
+   * - 2.1: Validate project access
+   * - 3.1: Validate asset access
    */
   async createReimbursement(data: CreateReimbursementInput): Promise<Reimbursement> {
     // Validate amount is positive
@@ -246,6 +310,17 @@ export class DatabaseReimbursementService implements IReimbursementService {
     const user = userCheck.rows[0];
     const submissionDate = data.date || new Date().toISOString().split('T')[0];
 
+    // Enhanced validation: Project access validation
+    if (data.projectId) {
+      const isProjectValid = await this.validateProjectAccess(data.projectId);
+      if (!isProjectValid) {
+        throw new Error('Invalid project or project is not active');
+      }
+    }
+
+    // Asset validation is now handled externally via n8n
+    // We only store the asset info if provided, without local database validation
+
     // Get lead info if exists
     let leadName = null;
     if (user.lead_id) {
@@ -258,13 +333,21 @@ export class DatabaseReimbursementService implements IReimbursementService {
     const query = `
       INSERT INTO reimbursements (
         user_id, employee_name, employee_email, amount, description, status, 
-        date, project, receipt_image, lead_id, lead_name, submission_date, approvals
+        date, project, project_id, asset_id, receipt_image, lead_id, lead_name, submission_date, approvals,
+        transaction_id, transaction_time, payment_method, transaction_amount, 
+        admin_fee, shipping_fee, service_fee, discount, login_status, by, folder_evidence
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING id::text, user_id::text as "userId", employee_name as "employeeName", 
                 employee_email as "employeeEmail", amount, description, status, date, project,
+                project_id::text as "projectId", asset_id::text as "assetId",
                 receipt_image as "receiptImage", lead_id::text as "leadId", lead_name as "leadName",
-                approvals, created_at as "createdAt", updated_at as "updatedAt"
+                approvals, created_at as "createdAt", updated_at as "updatedAt",
+                transaction_id as "transactionId", transaction_time as "transactionTime",
+                payment_method as "paymentMethod", transaction_amount as "transactionAmount",
+                admin_fee as "adminFee", shipping_fee as "shippingFee", 
+                service_fee as "serviceFee", discount, login_status as "loginStatus",
+                by, folder_evidence as "folderEvidence"
     `;
 
     const result = await db.query(query, [
@@ -276,11 +359,24 @@ export class DatabaseReimbursementService implements IReimbursementService {
       'pending', // New reimbursements always start as pending
       submissionDate,
       (data.project as any) || 'MaxStream',
+      data.projectId ? parseInt(data.projectId) : null,
+      data.assetId ? parseInt(data.assetId) : null,
       data.receiptImage || null,
       user.lead_id || null,
       leadName,
       submissionDate,
       JSON.stringify({}), // Empty approvals object
+      (data as any).transactionId || null,
+      (data as any).transactionTime || null,
+      (data as any).paymentMethod || (data as any).payment_method || null,
+      (data as any).transactionAmount || null,
+      (data as any).adminFee || 0,
+      (data as any).shippingFee || 0,
+      (data as any).serviceFee || 0,
+      (data as any).discount || 0,
+      (data as any).loginStatus || null,
+      (data as any).by || null,
+      (data as any).folderEvidence || null,
     ]);
 
     const row = result.rows[0];
@@ -301,7 +397,19 @@ export class DatabaseReimbursementService implements IReimbursementService {
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
       leadId: row.leadId,
       leadName: row.leadName,
-    };
+      // Additional transaction details
+      transactionId: row.transactionId,
+      transactionTime: row.transactionTime,
+      paymentMethod: row.paymentMethod,
+      transactionAmount: row.transactionAmount ? parseFloat(row.transactionAmount) : undefined,
+      adminFee: row.adminFee ? parseFloat(row.adminFee) : 0,
+      shippingFee: row.shippingFee ? parseFloat(row.shippingFee) : 0,
+      serviceFee: row.serviceFee ? parseFloat(row.serviceFee) : 0,
+      discount: row.discount ? parseFloat(row.discount) : 0,
+      loginStatus: row.loginStatus,
+      by: row.by,
+      folderEvidence: row.folderEvidence,
+    } as any;
   }
 
   /**
@@ -431,5 +539,332 @@ export class DatabaseReimbursementService implements IReimbursementService {
     if (result.rows.length === 0) {
       throw new Error('Reimbursement not found');
     }
+  }
+
+  /**
+   * Validate date logic: Asset registration date vs transaction date
+   * 
+   * Business rule: Asset registration date must be <= transaction date
+   * 
+   * @param assetDate - The asset registration date
+   * @param transactionDate - The transaction date
+   * @returns Promise resolving to true if valid, false otherwise
+   * 
+   * Requirements:
+   * - 3.2: Implement date validation logic
+   */
+  async validateDateLogic(assetDate: Date, transactionDate: Date): Promise<boolean> {
+    return this.assetService.validateAssetRegistrationDate(assetDate, transactionDate);
+  }
+
+  /**
+   * Validate project access and status
+   * 
+   * Checks if project exists and is active for reimbursement requests
+   * 
+   * @param projectId - The project ID to validate
+   * @returns Promise resolving to true if valid and active, false otherwise
+   * 
+   * Requirements:
+   * - 2.1: Only active projects should be available for reimbursement requests
+   */
+  async validateProjectAccess(projectId: string): Promise<boolean> {
+    try {
+      const project = await this.projectService.getProjectById(projectId);
+      return project !== null && project.status === 'ACTIVE';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Validate asset access and status
+   * 
+   * Checks if asset exists and is active for reimbursement requests
+   * 
+   * @param assetId - The asset ID to validate
+   * @returns Promise resolving to true if valid and active, false otherwise
+   * 
+   * Requirements:
+   * - 3.1: Only active assets should be available for reimbursement requests
+   */
+  async validateAssetAccess(assetId: string): Promise<boolean> {
+    try {
+      const asset = await this.assetService.getAssetById(assetId);
+      return asset !== null && asset.status === 'ACTIVE';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Get reimbursements by project ID
+   * 
+   * @param projectId - The project ID to filter by
+   * @returns Promise resolving to array of reimbursements for the project
+   * 
+   * Requirements:
+   * - 2.1: Support project-based filtering for reimbursements
+   */
+  async getReimbursementsByProject(projectId: string): Promise<Reimbursement[]> {
+    const query = `
+      SELECT 
+        r.id::text,
+        r.user_id::text as "userId",
+        COALESCE(r.employee_name, u.name) as "employeeName",
+        COALESCE(r.employee_email, u.email) as "employeeEmail",
+        r.amount,
+        r.description,
+        r.status,
+        COALESCE(r.date, r.submission_date::text) as date,
+        COALESCE(r.project, 'MaxStream') as project,
+        r.receipt_image as "receiptImage",
+        r.asset,
+        r.approvals,
+        r.rejection_reason as "rejectionReason",
+        r.approval_date as "approvalDate",
+        r.created_at as "createdAt",
+        r.updated_at as "updatedAt",
+        COALESCE(r.lead_id::text, u.lead_id::text) as "leadId",
+        COALESCE(r.lead_name, l.name) as "leadName",
+        r.transaction_id as "transactionId",
+        r.transaction_time as "transactionTime",
+        r.payment_method as "paymentMethod",
+        r.transaction_amount as "transactionAmount",
+        r.admin_fee as "adminFee",
+        r.shipping_fee as "shippingFee",
+        r.service_fee as "serviceFee",
+        r.discount,
+        r.login_status as "loginStatus",
+        r.by,
+        r.folder_evidence as "folderEvidence"
+      FROM reimbursements r
+      INNER JOIN users u ON r.user_id = u.id
+      LEFT JOIN users l ON COALESCE(r.lead_id, u.lead_id) = l.id
+      WHERE r.project_id = $1
+      ORDER BY r.submission_date DESC
+    `;
+
+    const result = await db.query(query, [projectId]);
+
+    return result.rows.map(row => ({
+      id: row.id,
+      userId: row.userId,
+      employeeName: row.employeeName,
+      employeeEmail: row.employeeEmail,
+      amount: parseFloat(row.amount),
+      description: row.description,
+      status: row.status,
+      date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date,
+      project: row.project,
+      receiptImage: row.receiptImage,
+      asset: row.asset,
+      approvals: row.approvals || {},
+      rejectionReason: row.rejectionReason,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+      leadId: row.leadId,
+      leadName: row.leadName,
+      // Additional transaction details
+      transactionId: row.transactionId,
+      transactionTime: row.transactionTime,
+      paymentMethod: row.paymentMethod,
+      transactionAmount: row.transactionAmount ? parseFloat(row.transactionAmount) : undefined,
+      adminFee: row.adminFee ? parseFloat(row.adminFee) : 0,
+      shippingFee: row.shippingFee ? parseFloat(row.shippingFee) : 0,
+      serviceFee: row.serviceFee ? parseFloat(row.serviceFee) : 0,
+      discount: row.discount ? parseFloat(row.discount) : 0,
+      loginStatus: row.loginStatus,
+      by: row.by,
+      folderEvidence: row.folderEvidence,
+    } as any));
+  }
+
+  /**
+   * Validate file upload for reimbursement request
+   * 
+   * Checks if file can be uploaded (not already used in active requests)
+   * 
+   * @param requestId - The reimbursement request ID
+   * @param fileName - The file name to validate
+   * @returns Promise resolving to true if upload is allowed, false otherwise
+   * 
+   * Requirements:
+   * - 3.3: Implement file upload anti-duplication
+   */
+  async validateFileUpload(requestId: string, fileName: string): Promise<boolean> {
+    // Check if file is already used in other active requests
+    const query = `
+      SELECT COUNT(*) as count 
+      FROM documents d
+      JOIN reimbursements r ON d.request_id = r.id::text
+      WHERE d.system_filename = $1 
+      AND d.request_id != $2
+      AND r.status IN ('pending', 'approved_by_lead', 'approved_by_head')
+      AND d.is_used = true
+    `;
+
+    const result = await db.query(query, [fileName, requestId]);
+    return parseInt(result.rows[0].count) === 0;
+  }
+
+  /**
+   * Attach document to reimbursement request
+   * 
+   * Links a document to a reimbursement request
+   * 
+   * @param requestId - The reimbursement request ID
+   * @param fileId - The file document ID
+   * @returns Promise resolving when attachment is complete
+   * 
+   * Requirements:
+   * - 4.1: Support document attachment to reimbursement requests
+   */
+  async attachDocument(requestId: string, fileId: string): Promise<void> {
+    // Update the document to mark it as used and link to request
+    const query = `
+      UPDATE documents 
+      SET request_id = $1, is_used = true 
+      WHERE id = $2
+    `;
+
+    await db.query(query, [requestId, fileId]);
+  }
+
+  /**
+   * Get reimbursements by user ID
+   * 
+   * @param userId - The user ID to filter by
+   * @returns Promise resolving to array of reimbursements for the user
+   */
+  async getReimbursementsByUser(userId: string): Promise<Reimbursement[]> {
+    return this.getReimbursements({ userId });
+  }
+
+  /**
+   * Update reimbursement status with approval workflow
+   * 
+   * New Flow:
+   * pending -> approved_by_lead -> submitted_to_head -> approved_by_head -> submitted_to_finance -> approved_by_finance
+   * 
+   * Lead Flow:
+   *   - Request page: See pending requests from their team, can approve -> status becomes approved_by_lead
+   *   - Approval page: See approved_by_lead requests, can submit to head -> status becomes submitted_to_head
+   * 
+   * Head Flow:
+   *   - Request page: See submitted_to_head requests, can approve -> status becomes approved_by_head
+   *   - Approval page: See approved_by_head requests, can submit to finance -> status becomes submitted_to_finance
+   * 
+   * Finance Flow:
+   *   - Request page: See submitted_to_finance requests, can approve -> status becomes approved_by_finance
+   * 
+   * @param id - The reimbursement ID
+   * @param status - The new status
+   * @param approvedBy - The user ID who approved/rejected
+   * @param rejectionReason - Optional rejection reason
+   * @returns Promise resolving to updated reimbursement
+   */
+  async updateReimbursementStatus(
+    id: string, 
+    status: ReimbursementStatus, 
+    approvedBy: string, 
+    rejectionReason?: string
+  ): Promise<Reimbursement> {
+    // Get current reimbursement to check approval sequence
+    const current = await this.getReimbursementById(id);
+    if (!current) {
+      throw new Error('Reimbursement not found');
+    }
+
+    // Validate approval sequence based on new flow
+    // pending -> approved_by_lead -> submitted_to_head -> approved_by_head -> submitted_to_finance -> approved_by_finance
+    
+    if (status === 'approved_by_lead' && current.status !== 'pending') {
+      throw new Error('Invalid approval sequence: Lead can only approve pending requests');
+    }
+    
+    if (status === 'submitted_to_head' && current.status !== 'approved_by_lead') {
+      throw new Error('Invalid approval sequence: Submit to Head requires Lead approval first');
+    }
+    
+    if (status === 'approved_by_head' && current.status !== 'submitted_to_head') {
+      throw new Error('Invalid approval sequence: Head can only approve requests submitted by Lead');
+    }
+    
+    if (status === 'submitted_to_finance' && current.status !== 'approved_by_head') {
+      throw new Error('Invalid approval sequence: Submit to Finance requires Head approval first');
+    }
+    
+    if (status === 'approved_by_finance' && current.status !== 'submitted_to_finance') {
+      throw new Error('Invalid approval sequence: Finance can only approve requests submitted by Head');
+    }
+
+    // Build approvals object
+    const approvals = current.approvals || {};
+    const approvalDate = new Date().toISOString();
+
+    if (status === 'approved_by_lead') {
+      approvals.lead = { approved: true, by: approvedBy, date: approvalDate };
+    } else if (status === 'submitted_to_head') {
+      // Lead submits to head - approval already recorded, just add submit flag
+      if (approvals.lead) {
+        approvals.lead = { 
+          approved: approvals.lead.approved, 
+          by: approvals.lead.by, 
+          date: approvals.lead.date, 
+          comment: approvals.lead.comment,
+          submittedToHead: true, 
+          submittedDate: approvalDate 
+        };
+      }
+    } else if (status === 'approved_by_head') {
+      approvals.head = { approved: true, by: approvedBy, date: approvalDate };
+    } else if (status === 'submitted_to_finance') {
+      // Head submits to finance - approval already recorded, just add submit flag
+      if (approvals.head) {
+        approvals.head = { 
+          approved: approvals.head.approved, 
+          by: approvals.head.by, 
+          date: approvals.head.date, 
+          comment: approvals.head.comment,
+          submittedToFinance: true, 
+          submittedDate: approvalDate 
+        };
+      }
+    } else if (status === 'approved_by_finance') {
+      approvals.finance = { approved: true, by: approvedBy, date: approvalDate };
+    } else if (status === 'rejected') {
+      // For rejection, mark as not approved based on current status
+      if (current.status === 'pending') {
+        approvals.lead = { approved: false, by: approvedBy, date: approvalDate, comment: rejectionReason };
+      } else if (current.status === 'approved_by_lead' || current.status === 'submitted_to_head') {
+        approvals.head = { approved: false, by: approvedBy, date: approvalDate, comment: rejectionReason };
+      } else {
+        approvals.finance = { approved: false, by: approvedBy, date: approvalDate, comment: rejectionReason };
+      }
+    }
+
+    // Update the reimbursement
+    const updateData: UpdateReimbursementInput = {
+      status,
+      approvals,
+      rejectionReason,
+      approvalDate: status === 'approved_by_finance' || status === 'rejected' ? approvalDate : undefined
+    };
+
+    const updated = await this.updateReimbursement(id, updateData);
+
+    // If final approval, submit to project webhook
+    if (status === 'approved_by_finance') {
+      try {
+        const { submitToProject } = await import('@/lib/services/reimbursementService');
+        await submitToProject(updated, updated.project);
+      } catch (error) {
+        console.error('Failed to submit to project webhook:', error);
+        // Don't fail the approval if webhook fails
+      }
+    }
+
+    return updated;
   }
 }

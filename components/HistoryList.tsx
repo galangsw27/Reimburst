@@ -37,7 +37,7 @@ export const HistoryList: React.FC<HistoryListProps> = () => {
     let filtered = [...reimbursements]
     
     // Filter by user if regular user role
-    if (user.role === 'user') {
+    if (user.role === 'tester') {
       filtered = filtered.filter(r => r.userId === user.id)
     }
     
@@ -520,23 +520,23 @@ export const HistoryList: React.FC<HistoryListProps> = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Employee:</span>
-                        <p className="font-medium">{request.employeeName}</p>
+                        <p className="font-medium max-w-[150px] truncate" title={request.employeeName}>{request.employeeName}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Email:</span>
-                        <p className="font-medium">{request.employeeEmail}</p>
+                        <p className="font-medium max-w-[180px] truncate" title={request.employeeEmail}>{request.employeeEmail}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Project:</span>
-                        <p className="font-medium">{request.project}</p>
+                        <p className="font-medium max-w-[150px] truncate" title={request.project}>{request.project}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Lead:</span>
-                        <p className="font-medium">{request.leadName || '-'}</p>
+                        <p className="font-medium max-w-[150px] truncate" title={request.leadName || '-'}>{request.leadName || '-'}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Description:</span>
-                        <p className="font-medium">{request.description}</p>
+                        <p className="font-medium max-w-[200px] truncate" title={request.description}>{request.description}</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Amount:</span>

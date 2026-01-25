@@ -8,9 +8,17 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { User } from '@/lib/types';
 
-// JWT secret from environment variable or default for development
-const JWT_SECRET: string = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+// JWT secret from environment variable - MUST be set in production
+const JWT_SECRET: string = process.env.JWT_SECRET || '';
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d'; // 7 days default
+
+// Validate JWT_SECRET is set
+if (!JWT_SECRET) {
+  console.error('CRITICAL: JWT_SECRET environment variable is not set!');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set in production environment');
+  }
+}
 
 export interface JWTPayload {
   userId: string;

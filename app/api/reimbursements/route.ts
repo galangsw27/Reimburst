@@ -129,6 +129,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(reimbursement, { status: 201 });
   } catch (error) {
     console.error('Error creating reimbursement:', error);
+    
+    // Return more detailed error message
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
       { error: 'Failed to create reimbursement' },
       { status: 500 }

@@ -9,14 +9,17 @@
  * - Parameterized queries to prevent SQL injection
  * - Password hashing for security
  * - COALESCE for partial updates
+ * - Enhanced: Status management (ACTIVE/INACTIVE)
+ * - Enhanced: Lead assignment functionality
+ * - Enhanced: Support for 4 roles (tester, lead, head, finance)
  * 
- * Requirements: 7.4, 9.1, 9.2
+ * Requirements: 7.4, 9.1, 9.2, 1.1, 1.2
  */
 
 import { User } from '@/lib/types';
 import { IUserService, CreateUserInput, UpdateUserInput } from '../types';
 import { db } from '@/lib/database/connection';
-import { createHash, randomBytes, pbkdf2 } from 'crypto';
+import { randomBytes, pbkdf2 } from 'crypto';
 import { promisify } from 'util';
 
 const pbkdf2Async = promisify(pbkdf2);
@@ -39,10 +42,18 @@ async function hashPassword(password: string): Promise<string> {
  * This service executes SQL queries against the users table and handles
  * data transformation to match the User interface format.
  * 
+ * Enhanced Features:
+ * - Status management (ACTIVE/INACTIVE) for user access control
+ * - Lead assignment functionality with validation
+ * - Support for 4 roles: tester, lead, head, finance
+ * - Role-based access control and hierarchy management
+ * 
  * Requirements:
  * - 7.4: Implement Database_Service that queries PostgreSQL
  * - 9.1: Return user objects with required fields
  * - 9.2: Include lead's name in the leadName field when user has a lead
+ * - 1.1: User status management (ACTIVE/INACTIVE)
+ * - 1.2: Lead assignment and hierarchy management
  */
 export class DatabaseUserService implements IUserService {
   /**
@@ -50,12 +61,14 @@ export class DatabaseUserService implements IUserService {
    * 
    * Uses LEFT JOIN to include lead names for users who have a lead.
    * Returns users ordered by creation date (newest first).
+   * Enhanced: Includes status field for user access control.
    * 
    * @returns Promise resolving to array of all users
    * 
    * Requirements:
    * - 9.1: Return user objects with fields: id, name, email, role, leadId, leadName
    * - 9.2: Include the lead's name in the leadName field
+   * - 1.1: Include status field for user access control
    */
   async getUsers(): Promise<User[]> {
     const query = `
@@ -65,7 +78,8 @@ export class DatabaseUserService implements IUserService {
         u.email, 
         u.role, 
         u.lead_id::text as "leadId",
-        l.name as "leadName"
+        l.name as "leadName",
+        COALESCE(u.status, 'ACTIVE') as status
       FROM users u
       LEFT JOIN users l ON u.lead_id = l.id
       ORDER BY u.created_at DESC
@@ -80,6 +94,7 @@ export class DatabaseUserService implements IUserService {
    * 
    * Uses parameterized query to prevent SQL injection.
    * Uses LEFT JOIN to include lead name if the user has a lead.
+   * Enhanced: Includes status field for user access control.
    * 
    * @param id - The user ID to look up
    * @returns Promise resolving to the user or null if not found
@@ -87,6 +102,7 @@ export class DatabaseUserService implements IUserService {
    * Requirements:
    * - 9.1: Return user object with required fields
    * - 9.2: Include the lead's name in the leadName field
+   * - 1.1: Include status field for user access control
    */
   async getUserById(id: string): Promise<User | null> {
     const query = `
@@ -96,7 +112,8 @@ export class DatabaseUserService implements IUserService {
         u.email, 
         u.role, 
         u.lead_id::text as "leadId",
-        l.name as "leadName"
+        l.name as "leadName",
+        COALESCE(u.status, 'ACTIVE') as status
       FROM users u
       LEFT JOIN users l ON u.lead_id = l.id
       WHERE u.id = $1
@@ -111,6 +128,7 @@ export class DatabaseUserService implements IUserService {
    * 
    * Hashes the password before storing it in the database.
    * Uses parameterized query to prevent SQL injection.
+   * Enhanced: Sets default status to ACTIVE for new users.
    * 
    * @param data - The user data to create
    * @returns Promise resolving to the created user
@@ -119,15 +137,16 @@ export class DatabaseUserService implements IUserService {
    * Requirements:
    * - 7.4: Implement createUser with password hashing
    * - 9.1: Return user object with required fields
+   * - 1.1: Set default status to ACTIVE for new users
    */
   async createUser(data: CreateUserInput): Promise<User> {
     // Hash the password before storing
     const hashedPassword = await hashPassword(data.password);
     
     const query = `
-      INSERT INTO users (name, email, password_hash, role, lead_id)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id::text, name, email, role, lead_id::text as "leadId"
+      INSERT INTO users (name, email, password_hash, role, lead_id, status)
+      VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+      RETURNING id::text, name, email, role, lead_id::text as "leadId", COALESCE(status, 'ACTIVE') as status
     `;
     
     const result = await db.query(query, [
@@ -205,6 +224,13 @@ export class DatabaseUserService implements IUserService {
       paramIndex++;
     }
     
+    // Enhanced: Support status updates
+    if (data.status !== undefined) {
+      updates.push(`status = $${paramIndex}`);
+      params.push(data.status);
+      paramIndex++;
+    }
+    
     // Always update the updated_at timestamp
     updates.push('updated_at = NOW()');
     
@@ -222,7 +248,7 @@ export class DatabaseUserService implements IUserService {
       UPDATE users
       SET ${updates.join(', ')}
       WHERE id = $1
-      RETURNING id::text, name, email, role, lead_id::text as "leadId"
+      RETURNING id::text, name, email, role, lead_id::text as "leadId", COALESCE(status, 'ACTIVE') as status
     `;
     
     const result = await db.query(query, params);
@@ -243,5 +269,208 @@ export class DatabaseUserService implements IUserService {
     }
     
     return user;
+  }
+
+  // ============================================================================
+  // Enhanced Methods for Status Management and Lead Assignment
+  // ============================================================================
+
+  /**
+   * Set user status (ACTIVE/INACTIVE)
+   * 
+   * @param userId - The user ID to update
+   * @param status - The status to set
+   * @returns Promise resolving to the updated user
+   * @throws Error if user not found
+   * 
+   * Requirements:
+   * - 1.1: User status management for access control
+   */
+  async setUserStatus(userId: string, status: 'ACTIVE' | 'INACTIVE'): Promise<User> {
+    const query = `
+      UPDATE users
+      SET status = $2, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id::text, name, email, role, lead_id::text as "leadId", COALESCE(status, 'ACTIVE') as status
+    `;
+    
+    const result = await db.query(query, [userId, status]);
+    
+    if (result.rows.length === 0) {
+      throw new Error('User not found');
+    }
+    
+    const user = result.rows[0];
+    
+    // If user has a lead, fetch the lead name
+    if (user.leadId) {
+      const leadQuery = `SELECT name FROM users WHERE id = $1`;
+      const leadResult = await db.query(leadQuery, [user.leadId]);
+      if (leadResult.rows.length > 0) {
+        user.leadName = leadResult.rows[0].name;
+      }
+    }
+    
+    return user;
+  }
+
+  /**
+   * Assign a lead to a user
+   * 
+   * @param userId - The user ID to update
+   * @param leadId - The lead user ID to assign (null to remove lead)
+   * @returns Promise resolving to the updated user
+   * @throws Error if user or lead not found, or if lead assignment is invalid
+   * 
+   * Requirements:
+   * - 1.2: Lead assignment and hierarchy management
+   */
+  async assignLead(userId: string, leadId: string | null): Promise<User> {
+    // Validate lead exists and has appropriate role if leadId is provided
+    if (leadId) {
+      const leadUser = await this.getUserById(leadId);
+      if (!leadUser) {
+        throw new Error('Lead user not found');
+      }
+      
+      // Validate lead eligibility
+      const isEligible = await this.validateLeadEligibility(leadId);
+      if (!isEligible) {
+        throw new Error('User cannot be assigned as a lead. Only users with role "lead" or "head" can be leads.');
+      }
+    }
+    
+    const query = `
+      UPDATE users
+      SET lead_id = $2, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id::text, name, email, role, lead_id::text as "leadId", COALESCE(status, 'ACTIVE') as status
+    `;
+    
+    const result = await db.query(query, [userId, leadId ? parseInt(leadId) : null]);
+    
+    if (result.rows.length === 0) {
+      throw new Error('User not found');
+    }
+    
+    const user = result.rows[0];
+    
+    // If user has a lead, fetch the lead name
+    if (user.leadId) {
+      const leadQuery = `SELECT name FROM users WHERE id = $1`;
+      const leadResult = await db.query(leadQuery, [user.leadId]);
+      if (leadResult.rows.length > 0) {
+        user.leadName = leadResult.rows[0].name;
+      }
+    }
+    
+    return user;
+  }
+
+  /**
+   * Get users by status
+   * 
+   * @param status - The status to filter by
+   * @returns Promise resolving to array of users with the specified status
+   * 
+   * Requirements:
+   * - 1.1: User status management for access control
+   */
+  async getUsersByStatus(status: 'ACTIVE' | 'INACTIVE'): Promise<User[]> {
+    const query = `
+      SELECT 
+        u.id::text, 
+        u.name, 
+        u.email, 
+        u.role, 
+        u.lead_id::text as "leadId",
+        l.name as "leadName",
+        COALESCE(u.status, 'ACTIVE') as status
+      FROM users u
+      LEFT JOIN users l ON u.lead_id = l.id
+      WHERE COALESCE(u.status, 'ACTIVE') = $1
+      ORDER BY u.created_at DESC
+    `;
+    
+    const result = await db.query(query, [status]);
+    return result.rows;
+  }
+
+  /**
+   * Get users by role
+   * 
+   * @param role - The role to filter by
+   * @returns Promise resolving to array of users with the specified role
+   * 
+   * Requirements:
+   * - 1.2: Role-based user management
+   */
+  async getUsersByRole(role: string): Promise<User[]> {
+    const query = `
+      SELECT 
+        u.id::text, 
+        u.name, 
+        u.email, 
+        u.role, 
+        u.lead_id::text as "leadId",
+        l.name as "leadName",
+        COALESCE(u.status, 'ACTIVE') as status
+      FROM users u
+      LEFT JOIN users l ON u.lead_id = l.id
+      WHERE u.role = $1
+      ORDER BY u.created_at DESC
+    `;
+    
+    const result = await db.query(query, [role]);
+    return result.rows;
+  }
+
+  /**
+   * Get user hierarchy (users under a specific lead)
+   * 
+   * @param leadId - The lead user ID
+   * @returns Promise resolving to array of users under the specified lead
+   * 
+   * Requirements:
+   * - 1.2: Lead assignment and hierarchy management
+   */
+  async getUserHierarchy(leadId: string): Promise<User[]> {
+    const query = `
+      SELECT 
+        u.id::text, 
+        u.name, 
+        u.email, 
+        u.role, 
+        u.lead_id::text as "leadId",
+        l.name as "leadName",
+        COALESCE(u.status, 'ACTIVE') as status
+      FROM users u
+      LEFT JOIN users l ON u.lead_id = l.id
+      WHERE u.lead_id = $1
+      ORDER BY u.created_at DESC
+    `;
+    
+    const result = await db.query(query, [parseInt(leadId)]);
+    return result.rows;
+  }
+
+  /**
+   * Validate if a user can be assigned as a lead
+   * 
+   * @param userId - The user ID to validate
+   * @returns Promise resolving to true if user can be a lead, false otherwise
+   * 
+   * Requirements:
+   * - 1.2: Lead assignment validation based on role hierarchy
+   */
+  async validateLeadEligibility(userId: string): Promise<boolean> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      return false;
+    }
+    
+    // Only users with role 'lead' or 'head' can be assigned as leads
+    // 'finance' and 'tester' cannot be leads
+    return user.role === 'lead' || user.role === 'head';
   }
 }

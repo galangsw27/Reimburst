@@ -22,10 +22,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMounted(true)
   }, [])
 
-  const login = (user: User) => {
+  const login = (user: User, token?: string) => {
     setUser(user)
     try {
       localStorage.setItem('user', JSON.stringify(user))
+      // Token is already stored by LoginPage, but we keep this for consistency
+      if (token) {
+        localStorage.setItem('token', token)
+      }
     } catch (error) {
       console.error('Error saving user to localStorage:', error)
     }
@@ -35,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     try {
       localStorage.removeItem('user')
+      localStorage.removeItem('token')
     } catch (error) {
       console.error('Error removing user from localStorage:', error)
     }

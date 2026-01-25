@@ -9,16 +9,18 @@ import { Label } from './ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { useReimbursements } from '@/lib/hooks/useReimbursements'
+import { invalidateReimbursementsCache } from '@/lib/hooks/useReimbursements'
 import { useAuth } from '@/providers/AuthProvider'
 import { reimbursementService } from '@/lib/services/reimbursementService'
-import { ReimbursementData, AppState, ProjectType, AssetMatchResult } from '@/lib/types'
-import axios from 'axios'
+import { ReimbursementData, Reimbursement, AppState, ProjectType, AssetMatchResult, FileDocument, Project } from '@/lib/types'
+import { apiClient } from '@/lib/api/client'
 
 interface UploadFormProps {
   onSuccess: () => void
+  initialProject?: string // Auto-select project from parent
 }
 
-export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
+export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProject }) => {
   const { user } = useAuth()
   const { addReimbursement } = useReimbursements()
   
@@ -36,7 +38,44 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
   const [showImageModal, setShowImageModal] = useState(false)
   const [isCheckingAsset, setIsCheckingAsset] = useState(false)
   const [assetCheckResult, setAssetCheckResult] = useState<AssetMatchResult | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<FileDocument[]>([])
+  const [currentFile, setCurrentFile] = useState<File | null>(null)
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([])
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Load available projects from database
+  React.useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        setIsLoadingProjects(true)
+        const response = await apiClient.get('/api/projects?status=ACTIVE')
+        const projects = response.data as Project[]
+        setAvailableProjects(projects)
+        
+        // Set default project based on initialProject prop or first available
+        if (initialProject && projects.some(p => p.name === initialProject)) {
+          setData(prev => ({ ...prev, project: initialProject as ProjectType }))
+        } else if (projects.length > 0 && !data.project) {
+          setData(prev => ({ ...prev, project: projects[0].name as ProjectType }))
+        }
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+        setValidationErrors(prev => [...prev, 'Failed to load available projects'])
+        // Fallback to hardcoded projects
+        setAvailableProjects([
+          { id: '1', projectId: '5-002-079', name: 'MaxStream', status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() },
+          { id: '2', projectId: '5-002-080', name: 'MyOrbit', status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() },
+          { id: '3', projectId: '5-002-081', name: 'Dunia Games', status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() }
+        ])
+      } finally {
+        setIsLoadingProjects(false)
+      }
+    }
+
+    loadProjects()
+  }, [initialProject]) // Add initialProject as dependency
 
   // Image file validation
   const validateImageFile = (file: File): { valid: boolean; error?: string } => {
@@ -53,6 +92,38 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
     }
 
     return { valid: true }
+  }
+
+  // Enhanced file validation with FileService API integration
+  const validateFileForUpload = async (file: File, requestId: string): Promise<{ valid: boolean; error?: string }> => {
+    // Basic file validation
+    const basicValidation = validateImageFile(file)
+    if (!basicValidation.valid) {
+      return basicValidation
+    }
+
+    try {
+      // Check with FileService API for anti-duplication
+      const response = await apiClient.post('/api/files/validate', {
+        requestId,
+        fileName: file.name
+      })
+      
+      if (!response.data.valid) {
+        return { 
+          valid: false, 
+          error: response.data.error || 'File tidak valid untuk diupload.' 
+        }
+      }
+
+      return { valid: true }
+    } catch (error) {
+      console.error('File validation error:', error)
+      return { 
+        valid: false, 
+        error: 'Gagal memvalidasi file. Silakan coba lagi.' 
+      }
+    }
   }
 
   // Convert image to base64
@@ -72,21 +143,41 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate image file
-    const validation = validateImageFile(file)
-    if (!validation.valid) {
-      setError(validation.error || 'File tidak valid')
-      setState('error')
-      return
-    }
-
     setState('processing')
     setError(null)
+    setCurrentFile(file)
 
     try {
+      // Generate request ID for this upload session
+      const requestId = `REQ-${Date.now()}`
+
+      // Enhanced file validation with FileService integration
+      const validation = await validateFileForUpload(file, requestId)
+      if (!validation.valid) {
+        setError(validation.error || 'File tidak valid')
+        setState('error')
+        return
+      }
+
       // Convert to base64 for preview only
       const base64Image = await convertToBase64(file)
       setPreviewUrl(base64Image)
+
+      // Upload file using FileService API with auto-rename and anti-duplication
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('requestId', requestId)
+
+      const uploadResponse = await apiClient.post('/api/files', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+
+      const fileDocument = uploadResponse.data as FileDocument
+
+      // Store uploaded file metadata
+      setUploadedFiles([fileDocument])
 
       // Process receipt with OCR webhook - send file directly
       const ocrResponse = await reimbursementService.processReceipt(file)
@@ -218,8 +309,8 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
       }
 
       setData({
-        nama: '',
-        msisdnEmail: '',
+        nama: data.nama, // Preserve nama yang sudah diisi
+        msisdnEmail: data.msisdnEmail, // Preserve msisdnEmail yang sudah diisi
         project: data.project,
         tgl: parseDate(extracted.tanggal),
         time: parseTime(extracted.waktu),
@@ -237,10 +328,28 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
         remark: ''
       })
 
+      // Asset check result will be preserved in state
+      // No need to reset assetCheckResult here
+
       setState('review')
     } catch (err) {
       console.error('Upload error:', err)
-      setError('Gagal memproses gambar. Pastikan webhook n8n aktif.')
+      
+      // Clean up uploaded file if OCR processing fails
+      if (uploadedFiles.length > 0) {
+        try {
+          await apiClient.delete(`/api/files/${uploadedFiles[0].id}`)
+          setUploadedFiles([])
+        } catch (cleanupError) {
+          console.error('File cleanup error:', cleanupError)
+        }
+      }
+      
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Gagal memproses gambar. Pastikan webhook n8n aktif.')
+      }
       setState('error')
     }
   }
@@ -248,53 +357,132 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Clear previous validation errors
+    setValidationErrors([])
+    
     if (!user) {
       setError('User tidak terautentikasi')
       setState('error')
       return
     }
 
+    // Enhanced validation
+    const errors: string[] = []
+    
+    if (!data.nama.trim()) {
+      errors.push('Nama harus diisi')
+    }
+    
+    if (!data.msisdnEmail.trim()) {
+      errors.push('MSISDN/Email harus diisi')
+    }
+    
+    if (!data.project) {
+      errors.push('Project harus dipilih')
+    }
+    
+    if (!data.tgl) {
+      errors.push('Tanggal transaksi harus diisi')
+    }
+    
+    if (data.total <= 0) {
+      errors.push('Total amount harus lebih besar dari 0')
+    }
+    
+    if (uploadedFiles.length === 0) {
+      errors.push('File struk harus diupload')
+    }
+    
+    // Validate selected project is still active
+    const selectedProject = availableProjects.find(p => p.name === data.project)
+    if (!selectedProject) {
+      errors.push('Project yang dipilih tidak valid atau tidak aktif')
+    }
+    
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      setState('upload')
+      return
+    }
+
     setState('processing')
 
     try {
-      // Try to match asset if msisdnEmail is provided
-      let assetMatchResult
-      if (data.msisdnEmail) {
-        const assetResponse = await reimbursementService.matchAsset(data.msisdnEmail)
-        if (assetResponse.success && assetResponse.data) {
-          assetMatchResult = assetResponse.data
-        }
+      // Use the result from the manual "Check Asset" button click if available
+      // This ensures we don't call the n8n webhook again during submission
+      const assetMatchResult = assetCheckResult
+
+      // Mark uploaded files as used to prevent duplication
+      for (const fileDoc of uploadedFiles) {
+        await apiClient.patch(`/api/files/${fileDoc.id}`, {
+          markAsUsed: true
+        })
       }
 
-      // Create reimbursement object
-      const newReimbursement = {
-        id: `REQ-${Date.now()}`,
+      // Create reimbursement object with enhanced data (without id - let database generate it)
+      const newReimbursement: Partial<Reimbursement> = {
         employeeName: data.nama || user.name,
         employeeEmail: data.msisdnEmail || user.email,
         userId: user.id,
         date: data.tgl,
         amount: data.total,
-        description: `${data.transaksi} - ${data.paymentType}`,
+        description: data.transaksi || `${data.transaksi} - ${data.paymentType}`,
         project: data.project,
         status: 'pending' as const,
         receiptImage: previewUrl || undefined,
         asset: assetMatchResult?.assetName,
+        paymentMethod: data.paymentType, // Store payment method
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         leadId: user.leadId,
         leadName: user.leadName,
       }
 
-      addReimbursement(newReimbursement)
+      // Add extra fields that will be used by the API but not in the type
+      const requestData = {
+        ...newReimbursement,
+        projectId: selectedProject?.id, // Include project ID for database reference
+        assetId: assetMatchResult?.assetId, // Include asset ID for database reference
+        documents: uploadedFiles, // Include file metadata for tracking
+        // Additional transaction details
+        transactionId: data.trxId,
+        transactionTime: data.time,
+        transactionAmount: data.amount,
+        adminFee: data.bAdmin,
+        shippingFee: data.bKirim,
+        serviceFee: data.bLayanan,
+        discount: data.diskon,
+        loginStatus: data.loginStatus,
+        by: data.by,
+        folderEvidence: uploadedFiles.length > 0 ? uploadedFiles[0].filePath : null,
+      }
+
+      await addReimbursement(requestData as Reimbursement)
+      
+      // Invalidate cache so new data appears immediately
+      invalidateReimbursementsCache()
+      
       setState('success')
       
       setTimeout(() => {
         onSuccess()
-      }, 2000)
+      }, 1500) // Reduced to 1.5 seconds for faster redirect
     } catch (err) {
       console.error('Submit error:', err)
-      setError('Gagal mengirim data.')
-      setState('error')
+      
+      if (err instanceof Error) {
+        // Check if it's a validation error from the backend
+        if (err.message.includes('validation') || err.message.includes('Invalid') || err.message.includes('tidak boleh') || err.message.includes('required')) {
+          setValidationErrors([err.message])
+          setState('upload')
+        } else {
+          setError(err.message)
+          setState('error')
+        }
+      } else {
+        setError('Gagal mengirim data.')
+        setState('error')
+      }
     }
   }
 
@@ -314,7 +502,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
       // If not available at build time, try runtime config
       if (!webhookUrl) {
         try {
-          const configResponse = await axios.get('/api/config')
+          const configResponse = await apiClient.get('/api/config')
           webhookUrl = configResponse.data.assetMatchWebhookUrl
         } catch (configError) {
           console.error('Failed to load runtime config:', configError)
@@ -325,7 +513,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
         throw new Error('Asset matching webhook URL tidak dikonfigurasi. Hubungi administrator.')
       }
       
-      const response = await axios.post(webhookUrl, {
+      const response = await apiClient.post(webhookUrl, {
         msisdn_email: data.msisdnEmail,
         timestamp: new Date().toISOString()
       })
@@ -358,15 +546,18 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
   const reset = () => {
     setState('upload')
     setPreviewUrl(null)
+    setCurrentFile(null)
+    setUploadedFiles([])
     setData({
       nama: '',
       msisdnEmail: '',
-      project: 'MaxStream',
+      project: (availableProjects.length > 0 ? availableProjects[0].name : 'MaxStream') as ProjectType,
       tgl: '', time: '', trxId: '', transaksi: '', paymentType: '',
       amount: 0, bAdmin: 0, bKirim: 0, bLayanan: 0, diskon: 0,
       loginStatus: 'Login', total: 0, by: '', remark: ''
     })
     setError(null)
+    setValidationErrors([])
     setAssetCheckResult(null)
   }
 
@@ -391,6 +582,33 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
               <CardTitle>Informasi Pengajuan</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Validation Errors Display */}
+              {validationErrors.length > 0 && (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                    <h3 className="text-sm font-semibold text-red-500">Validation Errors</h3>
+                  </div>
+                  <ul className="space-y-1">
+                    {validationErrors.map((error, index) => (
+                      <li key={index} className="text-xs text-red-600 flex items-start gap-1">
+                        <span className="text-red-500 mt-0.5">•</span>
+                        <span>{error}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setValidationErrors([])}
+                    className="mt-2 h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                  >
+                    <X className="w-3 h-3 mr-1" />
+                    Clear Errors
+                  </Button>
+                </div>
+              )}
+
               <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                 <h3 className="text-sm font-semibold mb-3 text-blue-400">Informasi User</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -514,12 +732,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-yellow-600 text-sm">
+                        <div className="flex items-center gap-2 text-red-500 text-sm">
                           <AlertCircle className="w-4 h-4" />
-                          No matching asset found in database
+                          Asset tidak ditemukan
                         </div>
-                        <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-600">
-                          ⚠ No asset match found. Anda masih dapat melanjutkan jika diperlukan.
+                        <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500 font-medium">
+                          ⚠ Harap gunakan asset yang valid / terdaftar.
                         </div>
                       </div>
                     )}
@@ -533,30 +751,66 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
                 </Label>
                 <Select value={data.project} onValueChange={val => setData({ ...data, project: val as ProjectType })}>
                   <SelectTrigger className="bg-background">
-                    <SelectValue />
+                    <SelectValue placeholder="Select a project" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MaxStream">MaxStream</SelectItem>
-                    <SelectItem value="MyOrbit">MyOrbit</SelectItem>
-                    <SelectItem value="Dunia Games">Dunia Games</SelectItem>
+                    {isLoadingProjects ? (
+                      <div className="flex items-center gap-2 p-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm">Loading projects...</span>
+                      </div>
+                    ) : availableProjects.length > 0 ? (
+                      availableProjects.map(project => (
+                        <SelectItem key={project.id} value={project.name}>
+                          <div className="flex flex-col">
+                            <span>{project.name}</span>
+                            <span className="text-xs text-muted-foreground">{project.projectId}</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="p-2 text-sm text-muted-foreground">
+                        No active projects available
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
+                {availableProjects.length === 0 && !isLoadingProjects && (
+                  <p className="text-xs text-yellow-600">No active projects available. Contact administrator.</p>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:border-primary/50 transition-all" onClick={() => fileInputRef.current?.click()}>
+          <Card 
+            className={`transition-all ${!assetCheckResult?.matched ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer hover:border-primary/50'}`} 
+            onClick={() => {
+              if (assetCheckResult?.matched) {
+                fileInputRef.current?.click()
+              }
+            }}
+          >
             <CardContent className="py-16 flex flex-col items-center text-center">
               <motion.div
-                className="mb-8 p-6 bg-primary/10 rounded-3xl border border-primary/20"
-                whileHover={{ scale: 1.1, rotate: 5 }}
+                className={`mb-8 p-6 rounded-3xl border ${!assetCheckResult?.matched ? 'bg-muted border-muted-foreground/20' : 'bg-primary/10 border-primary/20'}`}
+                whileHover={assetCheckResult?.matched ? { scale: 1.1, rotate: 5 } : {}}
               >
-                <Upload className="w-16 h-16 text-primary" />
+                <Upload className={`w-16 h-16 ${!assetCheckResult?.matched ? 'text-muted-foreground' : 'text-primary'}`} />
               </motion.div>
               <h2 className="text-3xl font-bold mb-3 text-white">Klik untuk Upload Struk</h2>
-              <p className="text-muted-foreground text-lg mb-8">Mendukung format JPG, PNG (Max 5MB)</p>
+              {!assetCheckResult?.matched ? (
+                <p className="text-yellow-500 font-medium mb-8">⚠️ Silakan lakukan "Check Asset" terlebih dahulu</p>
+              ) : (
+                <p className="text-muted-foreground text-lg mb-8">Mendukung format JPG, PNG (Max 5MB)</p>
+              )}
               <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden" accept="image/*" />
-              <Button size="lg" className="shadow-lg shadow-primary/30">Pilih File Struk</Button>
+              <Button 
+                size="lg" 
+                className="shadow-lg shadow-primary/30"
+                disabled={!assetCheckResult?.matched}
+              >
+                Pilih File Struk
+              </Button>
             </CardContent>
           </Card>
         </motion.div>
@@ -595,6 +849,30 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
             </CardHeader>
             <CardContent className="pt-6">
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* File Upload Status */}
+                {uploadedFiles.length > 0 && (
+                  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <h3 className="text-sm font-semibold text-green-400 mb-3">File Berhasil Diupload</h3>
+                    {uploadedFiles.map((fileDoc, index) => (
+                      <div key={fileDoc.id} className="flex items-center justify-between text-sm">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            <span className="font-medium">{fileDoc.originalFileName}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground ml-6">
+                            <span>Renamed to: </span>
+                            <span className="font-mono bg-muted px-2 py-1 rounded">{fileDoc.systemFileName}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground ml-6">
+                            Size: {(fileDoc.fileSize / 1024).toFixed(1)} KB | Type: {fileDoc.mimeType}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-primary">Informasi Pengaju</h3>
@@ -676,9 +954,14 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess }) => {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-yellow-600 text-sm">
-                          <AlertCircle className="w-4 h-4" />
-                          Asset tidak ditemukan di database
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2 text-red-500 text-sm">
+                            <AlertCircle className="w-4 h-4" />
+                            Asset tidak ditemukan
+                          </div>
+                          <div className="p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500 font-medium">
+                            ⚠ Harap gunakan asset yang valid / terdaftar.
+                          </div>
                         </div>
                       )}
                     </motion.div>

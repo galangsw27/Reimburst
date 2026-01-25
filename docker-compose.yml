@@ -15,6 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/01-init.sql
       - ./scripts/migrate-approvals.sql:/docker-entrypoint-initdb.d/02-migrate-approvals.sql
+      - ./scripts/approval-flow-migration.sql:/docker-entrypoint-initdb.d/03-approval-flow-migration.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s

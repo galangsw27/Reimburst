@@ -2,7 +2,29 @@
 // Migrated from src/types.ts
 
 // User and Authentication Types
-export type UserRole = 'user' | 'head' | 'lead' | 'finance'
+export type UserRole = 'tester' | 'head' | 'lead' | 'finance'
+
+// Project Types
+export interface Project {
+  id: string
+  projectId: string // Format: 5-002-079
+  name: string
+  status: 'ACTIVE' | 'INACTIVE'
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Asset Types
+export interface Asset {
+  id: string
+  assetNumber: string
+  description: string
+  registrationDate: Date
+  createdBy: string
+  status: 'ACTIVE' | 'INACTIVE'
+  createdAt: Date
+  updatedAt: Date
+}
 
 export interface User {
   id: string
@@ -12,15 +34,19 @@ export interface User {
   picture?: string
   leadId?: string // For users, reference to their lead
   leadName?: string // For display
+  status: 'ACTIVE' | 'INACTIVE' // Enhanced: User status management
 }
 
 // Reimbursement Types
+// Flow: pending -> approved_by_lead -> submitted_to_head -> approved_by_head -> submitted_to_finance -> approved_by_finance
 export type ReimbursementStatus = 
-  | 'pending' 
-  | 'approved_by_head' 
-  | 'approved_by_lead' 
-  | 'approved_by_finance' 
-  | 'rejected'
+  | 'pending'                  // User uploaded, waiting for Lead approval
+  | 'approved_by_lead'         // Lead approved, waiting for Lead to submit to Head
+  | 'submitted_to_head'        // Lead submitted to Head, waiting for Head approval
+  | 'approved_by_head'         // Head approved, waiting for Head to submit to Finance
+  | 'submitted_to_finance'     // Head submitted to Finance, waiting for Finance approval
+  | 'approved_by_finance'      // Finance approved, finished
+  | 'rejected'                 // Rejected at any stage
 
 export type ProjectType = 'MaxStream' | 'MyOrbit' | 'Dunia Games'
 
@@ -38,6 +64,8 @@ export interface Reimbursement {
   receiptImage?: string
   imageUrl?: string
   asset?: string
+  paymentMethod?: string // Payment method (e.g., Cash, Transfer, etc.)
+  transactionTime?: string
   createdAt: string
   updatedAt: string
   approvedBy?: {
@@ -46,8 +74,8 @@ export interface Reimbursement {
     finance?: string
   }
   approvals?: {
-    head?: { approved: boolean; by: string; date: string; comment?: string }
-    lead?: { approved: boolean; by: string; date: string; comment?: string }
+    head?: { approved: boolean; by: string; date: string; comment?: string; submittedToFinance?: boolean; submittedDate?: string }
+    lead?: { approved: boolean; by: string; date: string; comment?: string; submittedToHead?: boolean; submittedDate?: string }
     finance?: { approved: boolean; by: string; date: string; comment?: string; assetMatch?: AssetMatchResult }
   }
   rejectionReason?: string
@@ -89,8 +117,8 @@ export interface ReimbursementRequest {
   status: ReimbursementStatus
   imageUrl?: string
   approvals: {
-    head?: { approved: boolean; by: string; date: string; comment?: string }
-    lead?: { approved: boolean; by: string; date: string; comment?: string }
+    head?: { approved: boolean; by: string; date: string; comment?: string; submittedToFinance?: boolean; submittedDate?: string }
+    lead?: { approved: boolean; by: string; date: string; comment?: string; submittedToHead?: boolean; submittedDate?: string }
     finance?: { approved: boolean; by: string; date: string; comment?: string; assetMatch?: AssetMatchResult }
   }
   rejectionReason?: string
@@ -154,6 +182,19 @@ export interface AssetMatchResponse {
   success: boolean
   data?: AssetMatchResult
   error?: string
+}
+
+// File Management Types
+export interface FileDocument {
+  id: string
+  requestId: string
+  originalFileName: string
+  systemFileName: string // Format: [sequence]_transaction_id.ext
+  filePath: string // Path in storage system
+  fileSize: number
+  mimeType: string
+  isUsed: boolean // Flag for anti-duplication
+  uploadedAt: Date
 }
 
 // Google Sheets Export Types

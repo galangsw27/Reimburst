@@ -49,18 +49,18 @@ export function isValidEmail(email: string): boolean {
  * validateRole('') // false
  */
 export function validateRole(role: string): role is UserRole {
-  const validRoles: UserRole[] = ['head', 'finance', 'lead', 'user'];
+  const validRoles: UserRole[] = ['head', 'finance', 'lead', 'tester'];
   return validRoles.includes(role as UserRole);
 }
 
 /**
- * Validates that a lead reference is valid for a user with role 'user'
+ * Validates that a lead reference is valid for a user with role 'tester'
  * 
  * Requirements: 8.3
  * 
  * This function checks:
- * 1. If the user role is 'user', a leadId must be provided
- * 2. The leadId must reference an existing user with role 'lead'
+ * 1. If the user role is 'tester', a leadId must be provided
+ * 2. The leadId must reference an existing user with role 'lead' or 'head'
  * 
  * @param role - The role of the user being created/updated
  * @param leadId - The lead ID to validate (optional)
@@ -68,10 +68,10 @@ export function validateRole(role: string): role is UserRole {
  * @returns Promise resolving to true if validation passes, false otherwise
  * 
  * @example
- * // User with role 'user' must have a valid lead
- * await validateLeadReference('user', '3', getUserById) // true if user 3 is a lead
- * await validateLeadReference('user', undefined, getUserById) // false - missing leadId
- * await validateLeadReference('user', '999', getUserById) // false - lead not found
+ * // User with role 'tester' must have a valid lead
+ * await validateLeadReference('tester', '3', getUserById) // true if user 3 is a lead or head
+ * await validateLeadReference('tester', undefined, getUserById) // false - missing leadId
+ * await validateLeadReference('tester', '999', getUserById) // false - lead not found
  * 
  * // Users with other roles don't need a lead
  * await validateLeadReference('head', undefined, getUserById) // true
@@ -82,17 +82,17 @@ export async function validateLeadReference(
   leadId: string | undefined,
   getUserById: (id: string) => Promise<{ id: string; role: UserRole } | null>
 ): Promise<boolean> {
-  // If role is not 'user', leadId is optional and validation passes
-  if (role !== 'user') {
+  // If role is not 'tester', leadId is optional and validation passes
+  if (role !== 'tester') {
     return true;
   }
 
-  // If role is 'user', leadId must be provided
+  // If role is 'tester', leadId must be provided
   if (!leadId) {
     return false;
   }
 
-  // Verify that the lead exists and has role 'lead'
+  // Verify that the lead exists and has role 'lead' or 'head'
   try {
     const lead = await getUserById(leadId);
     
@@ -100,7 +100,7 @@ export async function validateLeadReference(
       return false;
     }
 
-    return lead.role === 'lead';
+    return lead.role === 'lead' || lead.role === 'head';
   } catch (error) {
     // If there's an error fetching the lead, validation fails
     console.error('Error validating lead reference:', error);

@@ -81,7 +81,7 @@ export function determineRole(email: string): UserRole {
   }
   
   // Default role for all other users
-  return 'user'
+  return 'tester'
 }
 
 /**
@@ -116,6 +116,7 @@ export async function verifyGoogleToken(credential: string): Promise<User> {
       name: decoded.name,
       role,
       picture: decoded.picture,
+      status: 'ACTIVE' // Default to ACTIVE for new users
     }
   } catch (error) {
     throw new Error(`Token verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`)

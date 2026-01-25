@@ -1,5 +1,30 @@
 'use client'
 
+/**
+ * Enhanced ApprovalList Component
+ * 
+ * This component handles the approval workflow for reimbursement requests with enhanced features:
+ * 
+ * Enhanced Features (Task 8.1):
+ * - Lead assignment routing validation: Only leads see requests from their assigned users
+ * - Enhanced role-based approval matrix with proper workflow sequence
+ * - Improved validation rules for approval workflow sequence (Lead → Head → Finance)
+ * - Enhanced asset matching validation with workflow prerequisites
+ * - Comprehensive error handling and validation feedback
+ * 
+ * Approval Workflow Sequence:
+ * 1. Lead (Level 1): Approves requests from assigned team members
+ * 2. Head (Level 2): Approves requests after lead approval or directly for users without leads
+ * 3. Finance (Final): Approves requests after proper sequence completion with asset matching
+ * 
+ * Lead Assignment Routing:
+ * - Leads only see requests where request.leadId matches their user.id
+ * - Head can see all requests regardless of lead assignment
+ * - Finance sees requests that have completed the proper approval sequence
+ * 
+ * Requirements: 1.2 (Lead assignment routing), 5.1 (Enhanced approval workflow)
+ */
+
 import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { CheckCircle, XCircle, Eye, Clock, Loader2, Database, AlertCircle, Filter, Calendar, X } from 'lucide-react'
@@ -11,7 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAuth } from '@/providers/AuthProvider'
 import { useReimbursements } from '@/lib/hooks/useReimbursements'
 import { Reimbursement, ReimbursementStatus, AssetMatchResult } from '@/lib/types'
-import axios from 'axios'
+import { apiClient } from '@/lib/api/client'
 
 interface ApprovalListProps {
   onUpdate?: () => void
@@ -30,6 +55,7 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
   const [isMatchingAsset, setIsMatchingAsset] = useState(false)
   const [assetMatchResult, setAssetMatchResult] = useState<AssetMatchResult | null>(null)
   const [checkedRequests, setCheckedRequests] = useState<Set<string>>(new Set())
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
   
   // Filters
   const [projectFilter, setProjectFilter] = useState<string>('all')
@@ -37,36 +63,45 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
 
-  // Get pending requests based on user role
+  // Enhanced: Get pending requests based on user role with improved approval matrix
+  // NEW FLOW:
+  // - Lead sees pending requests from their team (to approve) -> becomes approved_by_lead
+  // - Head sees submitted_to_head requests (to approve) -> becomes approved_by_head
+  // - Finance sees submitted_to_finance requests (to approve) -> becomes approved_by_finance
   const pendingRequests = useMemo(() => {
     if (!user || !mounted) return []
     
     const role = user.role
     
-    if (role === 'head') {
-      // Head sees all pending requests
-      return reimbursements.filter(req => 
-        req.status === 'pending' || 
-        (req.status === 'approved_by_lead' && !req.approvals?.head)
-      )
+    if (role === 'lead') {
+      // Lead sees pending requests from users assigned to them
+      return reimbursements.filter(req => {
+        // Validate lead assignment routing
+        if (req.leadId !== user.id) {
+          return false
+        }
+        
+        // Lead sees pending requests from their assigned users
+        return req.status === 'pending' && !req.approvals?.lead?.approved
+      })
     }
     
-    if (role === 'lead') {
-      // Lead only sees requests from users assigned to them
-      return reimbursements.filter(req => 
-        req.leadId === user.id && (
-          req.status === 'pending' || 
-          (req.status === 'approved_by_head' && !req.approvals?.lead)
-        )
-      )
+    if (role === 'head') {
+      // Head sees requests that have been submitted to head by lead
+      return reimbursements.filter(req => {
+        return req.status === 'submitted_to_head' && 
+               req.approvals?.lead?.approved &&
+               !req.approvals?.head?.approved
+      })
     }
     
     if (role === 'finance') {
-      // Finance sees requests approved by both head and lead
-      return reimbursements.filter(req => 
-        (req.status === 'approved_by_head' && req.approvals?.head && req.approvals?.lead) ||
-        (req.status === 'approved_by_lead' && req.approvals?.head && req.approvals?.lead)
-      )
+      // Finance sees requests that have been submitted to finance by head
+      return reimbursements.filter(req => {
+        return req.status === 'submitted_to_finance' &&
+               req.approvals?.head?.approved &&
+               !req.approvals?.finance?.approved
+      })
     }
     
     return []
@@ -137,112 +172,250 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
     setShowApproveModal(true)
   }
 
-  // Handle approve action
+  // Enhanced: Handle approve action with improved validation and approval workflow sequence
   const handleApprove = async (requestId: string) => {
     if (!user) return
+    
+    // Clear previous validation errors
+    setValidationErrors([])
     
     setShowApproveModal(false)
     const role = user.role
     
-    // For finance, check if asset matching has been done
-    if (role === 'finance') {
-      if (!checkedRequests.has(requestId)) {
-        alert('Silakan lakukan Check Asset terlebih dahulu sebelum approve!')
+    try {
+      // Enhanced validation for all roles
+      const request = reimbursements.find(r => r.id === requestId)
+      if (!request) {
+        setValidationErrors(['Request not found'])
         return
       }
+
+      // Enhanced: Validate request data integrity
+      const errors: string[] = []
       
-      if (!assetMatchResult || selectedRequest?.id !== requestId) {
-        alert('Silakan lakukan Check Asset terlebih dahulu sebelum approve!')
-        return
+      if (!request.employeeName?.trim()) {
+        errors.push('Employee name is missing')
       }
       
-      // Approve with asset match result
-      const request = reimbursements.find(r => r.id === requestId)
-      if (!request) return
-      
-      const approval = {
-        approved: true,
-        by: user.name,
-        date: new Date().toISOString(),
-        comment,
-        assetMatch: assetMatchResult
+      if (!request.employeeEmail?.trim()) {
+        errors.push('Employee email is missing')
       }
       
-      updateReimbursement(requestId, {
-        status: 'approved_by_finance',
-        approvals: {
-          ...request.approvals,
-          finance: approval
-        },
-        asset: assetMatchResult.matched ? assetMatchResult.assetId : undefined
-      })
-      
-      setComment('')
-      setSelectedRequest(null)
-      setAssetMatchResult(null)
-      setCheckedRequests(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(requestId)
-        return newSet
-      })
-      
-      onUpdate?.()
-    } else {
-      // For head/lead, approve directly
-      const request = reimbursements.find(r => r.id === requestId)
-      if (!request) return
-      
-      const approval = {
-        approved: true,
-        by: user.name,
-        date: new Date().toISOString(),
-        comment
+      if (!request.project?.trim()) {
+        errors.push('Project information is missing')
       }
       
-      let newStatus: ReimbursementStatus = request.status
-      const newApprovals = { ...request.approvals }
+      if (request.amount <= 0) {
+        errors.push('Invalid amount')
+      }
       
-      if (role === 'head') {
-        newApprovals.head = approval
-        // Head approval always sets status to approved_by_head
-        // This indicates head has approved (regardless of lead status)
-        newStatus = 'approved_by_head'
+      if (!request.date) {
+        errors.push('Transaction date is missing')
+      }
+
+      // Enhanced: Role-specific validation with approval workflow sequence
+      if (role === 'finance') {
+        // Finance validation (final approval)
+        if (!checkedRequests.has(requestId)) {
+          errors.push('Asset matching must be performed before approval')
+        }
+        
+        if (!assetMatchResult || selectedRequest?.id !== requestId) {
+          errors.push('Asset matching result is missing or invalid')
+        }
+        
+        // Enhanced: Validate approval workflow sequence for finance
+        // Finance can only approve submitted_to_finance requests
+        if (request.status !== 'submitted_to_finance') {
+          errors.push('Request must be submitted to Finance before approval')
+        }
+        
+        if (!request.approvals?.head?.approved) {
+          errors.push('Request must be approved by Head before Finance approval')
+        }
+        
+        // Validate finance hasn't already approved
+        if (request.approvals?.finance?.approved) {
+          errors.push('Request has already been approved by Finance')
+        }
+        
       } else if (role === 'lead') {
-        newApprovals.lead = approval
-        // If head already approved, keep status as approved_by_head
-        // Otherwise set to approved_by_lead
-        if (newApprovals.head?.approved) {
-          newStatus = 'approved_by_head'
-        } else {
-          newStatus = 'approved_by_lead'
+        // Enhanced: Lead validation - can approve pending requests from their team
+        if (request.leadId !== user.id) {
+          errors.push('You can only approve requests from your assigned team members')
+        }
+        
+        if (request.status !== 'pending') {
+          errors.push('Lead can only approve pending requests')
+        }
+        
+        // Validate lead hasn't already approved
+        if (request.approvals?.lead?.approved) {
+          errors.push('You have already approved this request')
+        }
+        
+        if (request.status === 'rejected') {
+          errors.push('Cannot approve a rejected request')
+        }
+        
+      } else if (role === 'head') {
+        // Enhanced: Head validation - can approve submitted_to_head requests
+        if (request.status !== 'submitted_to_head') {
+          errors.push('Head can only approve requests submitted by Lead')
+        }
+        
+        if (request.status === 'rejected') {
+          errors.push('Cannot approve a rejected request')
+        }
+        
+        // Validate head hasn't already approved
+        if (request.approvals?.head?.approved) {
+          errors.push('You have already approved this request')
+        }
+        
+        if (request.status === 'approved_by_finance') {
+          errors.push('Request has already been approved by Finance')
         }
       }
-      
-      updateReimbursement(requestId, {
-        status: newStatus,
-        approvals: newApprovals
-      })
-      
-      setComment('')
-      setSelectedRequest(null)
-      onUpdate?.()
+
+      if (errors.length > 0) {
+        setValidationErrors(errors)
+        return
+      }
+
+      // Enhanced: Proceed with approval using improved workflow sequence
+      if (role === 'finance') {
+        const approval = {
+          approved: true,
+          by: user.name,
+          date: new Date().toISOString(),
+          comment,
+          assetMatch: assetMatchResult || undefined
+        }
+        
+        updateReimbursement(requestId, {
+          status: 'approved_by_finance',
+          approvals: {
+            ...request.approvals,
+            finance: approval
+          },
+          asset: assetMatchResult?.matched ? assetMatchResult.assetId : undefined
+        })
+        
+        setComment('')
+        setSelectedRequest(null)
+        setAssetMatchResult(null)
+        setCheckedRequests(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(requestId)
+          return newSet
+        })
+        
+        onUpdate?.()
+      } else {
+        // Enhanced: For head/lead, implement proper approval workflow sequence
+        const approval = {
+          approved: true,
+          by: user.name,
+          date: new Date().toISOString(),
+          comment
+        }
+        
+        let newStatus: ReimbursementStatus = request.status
+        const newApprovals = { ...request.approvals }
+        
+        if (role === 'head') {
+          newApprovals.head = approval
+          
+          // Enhanced: Determine next status based on lead assignment and current approvals
+          if (request.leadId && !newApprovals.lead?.approved) {
+            // User has lead but lead hasn't approved yet - status remains for lead approval
+            newStatus = 'approved_by_head'
+          } else if (request.leadId && newApprovals.lead?.approved) {
+            // User has lead and lead already approved - ready for finance
+            newStatus = 'approved_by_head'
+          } else {
+            // User has no lead assigned - head approval moves to finance
+            newStatus = 'approved_by_head'
+          }
+          
+        } else if (role === 'lead') {
+          newApprovals.lead = approval
+          
+          // Enhanced: Determine next status based on head approval status
+          if (newApprovals.head?.approved) {
+            // Head already approved - ready for finance
+            newStatus = 'approved_by_head'
+          } else {
+            // Head hasn't approved yet - status shows lead approved
+            newStatus = 'approved_by_lead'
+          }
+        }
+        
+        updateReimbursement(requestId, {
+          status: newStatus,
+          approvals: newApprovals
+        })
+        
+        setComment('')
+        setSelectedRequest(null)
+        onUpdate?.()
+      }
+    } catch (error) {
+      console.error('Approval error:', error)
+      if (error instanceof Error) {
+        setValidationErrors([`Approval failed: ${error.message}`])
+      } else {
+        setValidationErrors(['Approval failed: Unknown error occurred'])
+      }
     }
   }
 
 
-  // Handle asset matching check
+  // Enhanced: Handle asset matching check with improved validation
   const handleCheckAsset = async (request: Reimbursement) => {
     setSelectedRequest(request)
     setIsMatchingAsset(true)
     
+    // Clear previous validation errors
+    setValidationErrors([])
+    
     try {
+      // Enhanced validation before asset check
+      if (!request.employeeEmail?.trim()) {
+        throw new Error('Employee email is required for asset matching')
+      }
+      
+      // Enhanced: Validate user role and permissions
+      if (user?.role !== 'finance') {
+        throw new Error('Only Finance users can perform asset matching')
+      }
+      
+      // Enhanced: Validate approval workflow sequence before asset check
+      // Finance can only check assets for submitted_to_finance requests
+      if (request.status !== 'submitted_to_finance') {
+        throw new Error('Asset matching can only be performed after request is submitted to Finance')
+      }
+      
+      if (!request.approvals?.head?.approved) {
+        throw new Error('Asset matching can only be performed after Head approval')
+      }
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const phoneRegex = /^(\+62|62|0)[0-9]{8,13}$/
+      
+      if (!emailRegex.test(request.employeeEmail) && !phoneRegex.test(request.employeeEmail)) {
+        throw new Error('Invalid email or phone number format')
+      }
+      
       // Try to get webhook URL from build-time env first
       let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
       
       // If not available at build time, try runtime config
       if (!webhookUrl) {
         try {
-          const configResponse = await axios.get('/api/config')
+          const configResponse = await apiClient.get('/api/config')
           webhookUrl = configResponse.data.assetMatchWebhookUrl
         } catch (configError) {
           console.error('Failed to load runtime config:', configError)
@@ -253,10 +426,16 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
         throw new Error('Asset matching webhook URL tidak dikonfigurasi. Hubungi administrator.')
       }
       
-      const response = await axios.post(webhookUrl, {
+      const response = await apiClient.post(webhookUrl, {
         msisdn_email: request.employeeEmail,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        requestId: request.id // Include request ID for tracking
       })
+      
+      // Enhanced response validation
+      if (!response.data) {
+        throw new Error('Invalid response from asset matching service')
+      }
       
       // Response structure: { data: { matched, assetId, assetName, ... } }
       const data = response.data.data || response.data
@@ -273,11 +452,28 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
         verifiedDate: data.verifiedDate || new Date().toISOString()
       }
       
+      // Validate match result
+      if (matchResult.matched && !matchResult.assetId) {
+        console.warn('Asset matched but no asset ID provided')
+      }
+      
       setAssetMatchResult(matchResult)
       setCheckedRequests(prev => new Set(prev).add(request.id))
+      
+      // Clear any previous validation errors on successful check
+      setValidationErrors([])
+      
     } catch (error) {
-      console.error('Matching error:', error)
-      alert('Gagal melakukan asset matching. Silakan coba lagi.')
+      console.error('Asset matching error:', error)
+      
+      if (error instanceof Error) {
+        setValidationErrors([`Asset matching failed: ${error.message}`])
+      } else {
+        setValidationErrors(['Asset matching failed: Unknown error occurred'])
+      }
+      
+      // Reset asset match result on error
+      setAssetMatchResult(null)
     } finally {
       setIsMatchingAsset(false)
     }
@@ -289,48 +485,113 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
     setShowRejectModal(true)
   }
 
-  // Handle reject action
+  // Enhanced: Handle reject action with improved validation
   const handleReject = (requestId: string) => {
     if (!user) return
     
-    const request = reimbursements.find(r => r.id === requestId)
-    if (!request) return
+    // Clear previous validation errors
+    setValidationErrors([])
     
-    const role = user.role
-    const rejection = {
-      approved: false,
-      by: user.name,
-      date: new Date().toISOString(),
-      comment: rejectReason
+    try {
+      const request = reimbursements.find(r => r.id === requestId)
+      if (!request) {
+        setValidationErrors(['Request not found'])
+        return
+      }
+      
+      // Enhanced validation for rejection
+      const errors: string[] = []
+      
+      if (!rejectReason?.trim()) {
+        errors.push('Rejection reason is required')
+      }
+      
+      if (rejectReason && rejectReason.trim().length < 10) {
+        errors.push('Rejection reason must be at least 10 characters long')
+      }
+      
+      // Enhanced: Role-specific validation with lead assignment routing
+      const role = user.role
+      if (role === 'lead' && request.leadId !== user.id) {
+        errors.push('You can only reject requests from your assigned team members')
+      }
+      
+      if (request.status === 'rejected') {
+        errors.push('Request is already rejected')
+      }
+      
+      if (request.status === 'approved_by_finance') {
+        errors.push('Cannot reject a request that has been approved by Finance')
+      }
+      
+      // Enhanced: Validate rejection authority based on approval workflow
+      if (role === 'finance') {
+        // Finance can reject at any stage
+        if (request.approvals?.finance?.approved) {
+          errors.push('Cannot reject a request you have already approved')
+        }
+      } else if (role === 'head') {
+        // Head can reject requests but validate workflow
+        if (request.approvals?.head?.approved) {
+          errors.push('Cannot reject a request you have already approved')
+        }
+      } else if (role === 'lead') {
+        // Lead can only reject their assigned users' requests
+        if (request.approvals?.lead?.approved) {
+          errors.push('Cannot reject a request you have already approved')
+        }
+      }
+      
+      if (errors.length > 0) {
+        setValidationErrors(errors)
+        return
+      }
+      
+      const rejection = {
+        approved: false,
+        by: user.name,
+        date: new Date().toISOString(),
+        comment: rejectReason
+      }
+      
+      const newApprovals = { ...request.approvals }
+      if (role === 'head') {
+        newApprovals.head = rejection
+      } else if (role === 'lead') {
+        newApprovals.lead = rejection
+      } else if (role === 'finance') {
+        newApprovals.finance = rejection
+      }
+      
+      updateReimbursement(requestId, {
+        status: 'rejected',
+        rejectionReason: rejectReason,
+        approvals: newApprovals
+      })
+      
+      setRejectReason('')
+      setShowRejectModal(false)
+      setSelectedRequest(null)
+      onUpdate?.()
+      
+    } catch (error) {
+      console.error('Rejection error:', error)
+      if (error instanceof Error) {
+        setValidationErrors([`Rejection failed: ${error.message}`])
+      } else {
+        setValidationErrors(['Rejection failed: Unknown error occurred'])
+      }
     }
-    
-    const newApprovals = { ...request.approvals }
-    if (role === 'head') {
-      newApprovals.head = rejection
-    } else if (role === 'lead') {
-      newApprovals.lead = rejection
-    } else if (role === 'finance') {
-      newApprovals.finance = rejection
-    }
-    
-    updateReimbursement(requestId, {
-      status: 'rejected',
-      rejectionReason: rejectReason,
-      approvals: newApprovals
-    })
-    
-    setRejectReason('')
-    setShowRejectModal(false)
-    setSelectedRequest(null)
-    onUpdate?.()
   }
 
   // Get status badge styling
   const getStatusBadge = (status: string) => {
     const badges = {
       pending: 'bg-yellow-500/20 text-yellow-500',
-      approved_by_head: 'bg-blue-500/20 text-blue-500',
       approved_by_lead: 'bg-blue-500/20 text-blue-500',
+      submitted_to_head: 'bg-indigo-500/20 text-indigo-500',
+      approved_by_head: 'bg-blue-600/20 text-blue-600',
+      submitted_to_finance: 'bg-purple-500/20 text-purple-500',
       approved_by_finance: 'bg-green-500/20 text-green-500',
       rejected: 'bg-red-500/20 text-red-500'
     }
@@ -348,6 +609,33 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
       <Card>
         <CardHeader>
           <CardTitle>Pending Approvals ({filteredRequests.length})</CardTitle>
+          
+          {/* Validation Errors Display */}
+          {validationErrors.length > 0 && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+                <h3 className="text-sm font-semibold text-red-500">Validation Errors</h3>
+              </div>
+              <ul className="space-y-1">
+                {validationErrors.map((error, index) => (
+                  <li key={index} className="text-xs text-red-600 flex items-start gap-1">
+                    <span className="text-red-500 mt-0.5">•</span>
+                    <span>{error}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setValidationErrors([])}
+                className="mt-2 h-6 px-2 text-xs text-red-600 hover:text-red-700"
+              >
+                <X className="w-3 h-3 mr-1" />
+                Clear Errors
+              </Button>
+            </div>
+          )}
           
           {/* Filters Section */}
           <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-4">
@@ -661,12 +949,12 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-yellow-500">
+                          <div className="flex items-center gap-2 text-red-500">
                             <AlertCircle className="w-4 h-4" />
-                            <span>No matching asset found in database</span>
+                            <span>Asset tidak ditemukan</span>
                           </div>
-                          <div className="mt-3 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-600">
-                            ⚠ No asset match found. You can still approve if needed.
+                          <div className="mt-3 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500 font-medium">
+                            ⚠ Harap gunakan asset yang valid / terdaftar.
                           </div>
                         </div>
                       )}

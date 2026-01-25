@@ -11,9 +11,11 @@
  */
 
 import { getDatabaseConfig } from '@/lib/config/database';
-import { IUserService, IReimbursementService } from './types';
+import { IUserService, IReimbursementService, IProjectService, IFileService } from './types';
 import { DatabaseUserService } from './database/userService';
 import { DatabaseReimbursementService } from './database/reimbursementService';
+import { DatabaseProjectService } from './database/projectService';
+import { DatabaseFileService } from './database/fileService';
 import { db } from '@/lib/database/connection';
 
 /**
@@ -53,4 +55,30 @@ export function getUserService(): IUserService {
 export function getReimbursementService(): IReimbursementService {
   ensureDatabaseInitialized();
   return new DatabaseReimbursementService();
+}
+
+/**
+ * Returns the project service implementation.
+ * 
+ * HARDCODED: Always returns DatabaseProjectService.
+ * Ensures database is initialized before returning service.
+ * 
+ * @returns IProjectService implementation (Database)
+ */
+export function getProjectService(): IProjectService {
+  ensureDatabaseInitialized();
+  return new DatabaseProjectService();
+}
+
+/**
+ * Returns the file service implementation.
+ * 
+ * HARDCODED: Always returns DatabaseFileService.
+ * Ensures database is initialized before returning service.
+ * 
+ * @returns IFileService implementation (Database)
+ */
+export function getFileService(): IFileService {
+  ensureDatabaseInitialized();
+  return new DatabaseFileService();
 }

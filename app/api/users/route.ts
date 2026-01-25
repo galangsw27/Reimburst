@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
  * Requirements:
  * - 6.3: Create POST /api/users endpoint to create new users
  * - 8.1: Validate that email is in valid email format
- * - 8.2: Validate that role is one of: head, finance, lead, user
+ * - 8.2: Validate that role is one of: head, finance, lead, tester
  */
 export async function POST(request: NextRequest) {
   // Authenticate and authorize (only head and finance can create users)
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     // Validate role (Requirement 8.2)
     if (!data.role || !validateRole(data.role)) {
       return NextResponse.json(
-        { error: 'Invalid role. Must be one of: head, finance, lead, user' },
+        { error: 'Invalid role. Must be one of: head, finance, lead, tester' },
         { status: 400 }
       );
     }
