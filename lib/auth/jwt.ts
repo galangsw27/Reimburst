@@ -14,9 +14,12 @@ const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d'; // 7 days def
 
 // Validate JWT_SECRET is set
 if (!JWT_SECRET) {
-  console.error('CRITICAL: JWT_SECRET environment variable is not set!');
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be set in production environment');
+    // During build phase, we only log a warning to allow the build to complete.
+    // The app will still fail at runtime if the secret is missing when needed.
+    console.warn('WARNING: JWT_SECRET environment variable is not set during build!');
+  } else {
+    console.warn('JWT_SECRET is not set. Using empty string (development only).');
   }
 }
 
@@ -35,6 +38,9 @@ export interface JWTPayload {
  * @returns JWT token string
  */
 export function generateToken(user: User): string {
+  if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured. Cannot generate token.');
+  }
   const payload: JWTPayload = {
     userId: user.id,
     email: user.email,
@@ -54,6 +60,10 @@ export function generateToken(user: User): string {
  * @returns Decoded JWT payload or null if invalid
  */
 export function verifyToken(token: string): JWTPayload | null {
+  if (!JWT_SECRET) {
+    console.error('JWT_SECRET is not configured. Cannot verify token.');
+    return null;
+  }
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
     return decoded;
