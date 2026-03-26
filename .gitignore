@@ -62,3 +62,8 @@ app/test-reimbursements/
 app/test-ui-components/
 n8n*
 supabase*
+*.jpg
+*.jpeg
+
+*.png
+*.webp

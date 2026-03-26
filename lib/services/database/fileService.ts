@@ -18,8 +18,9 @@
 import { FileDocument } from '@/lib/types';
 import { IFileService, UploadFileInput, CreateFileDocumentInput, FileDocumentFilters } from '../types';
 import { db } from '@/lib/database/connection';
-import { getDatabaseConfig } from '@/lib/config/database';
+import fs from 'fs';
 import path from 'path';
+import { getDatabaseConfig } from '@/lib/config/database';
 
 /**
  * DatabaseFileService implements IFileService using PostgreSQL database.
@@ -88,6 +89,16 @@ export class DatabaseFileService implements IFileService {
     if (!isAvailable) {
       throw new Error(`File with name "${systemFileName}" is already used in another request`);
     }
+    
+    // Save file to disk
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    const filePath = path.join(uploadDir, systemFileName);
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    fs.writeFileSync(filePath, fileBuffer);
     
     const query = `
       INSERT INTO documents (

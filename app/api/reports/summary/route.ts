@@ -11,8 +11,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseReportService } from '@/lib/services/database/reportService';
 import { ReportFilters } from '@/lib/services/types';
 import { authenticateAndAuthorize } from '@/lib/auth/middleware';
+import { UserRole } from '@/lib/types';
 
 const reportService = new DatabaseReportService();
+
+// Allowed roles for reports
+const ALLOWED_ROLES: UserRole[] = ['lead', 'head', 'finance'];
 
 /**
  * GET /api/reports/summary
@@ -33,8 +37,8 @@ const reportService = new DatabaseReportService();
  * - 6.1: Provide report summary statistics with filtering
  */
 export async function GET(request: NextRequest) {
-  // Authenticate request
-  const { user, error } = authenticateAndAuthorize(request);
+  // Authenticate and authorize request
+  const { user, error } = authenticateAndAuthorize(request, ALLOWED_ROLES);
   if (error) return error;
   
   try {
@@ -85,12 +89,12 @@ export async function GET(request: NextRequest) {
       filters: filters,
     });
   } catch (error: any) {
-    console.error('Error in report summary API:', error);
+    console.error('Error in report summary GET API:', error);
     return NextResponse.json(
       { 
         success: false, 
         error: 'Failed to get report summary',
-        details: error.message 
+        details: error.message || String(error)
       },
       { status: 500 }
     );
@@ -113,13 +117,15 @@ export async function GET(request: NextRequest) {
  * - 6.1: Support report summary with POST method for complex filters
  */
 export async function POST(request: NextRequest) {
-  // Authenticate request
-  const { user, error } = authenticateAndAuthorize(request);
+  // Authenticate and authorize request
+  const { user, error } = authenticateAndAuthorize(request, ALLOWED_ROLES);
   if (error) return error;
   
   try {
     const body = await request.json();
     const { filters = {} } = body;
+    
+    console.log('DEBUG: Report summary request - filters:', JSON.stringify(filters));
     
     // Convert date strings to Date objects if provided
     if (filters.dateFrom && typeof filters.dateFrom === 'string') {
@@ -132,9 +138,10 @@ export async function POST(request: NextRequest) {
     
     // Validate filters
     const isValid = await reportService.validateReportFilters(filters);
+    console.log('DEBUG: Summary validation result:', isValid);
     if (!isValid) {
       return NextResponse.json(
-        { error: 'Invalid filter parameters' },
+        { error: 'Invalid filter parameters', filters: filters },
         { status: 400 }
       );
     }
@@ -148,12 +155,12 @@ export async function POST(request: NextRequest) {
       filters: filters,
     });
   } catch (error: any) {
-    console.error('Error in report summary API:', error);
+    console.error('Error in report summary POST API:', error);
     return NextResponse.json(
       { 
         success: false, 
         error: 'Failed to get report summary',
-        details: error.message 
+        details: error.message || String(error)
       },
       { status: 500 }
     );

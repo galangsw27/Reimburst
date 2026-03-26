@@ -638,12 +638,18 @@ export const HistoryList: React.FC<HistoryListProps> = () => {
                           <strong className="text-sm">Asset Matched</strong>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-muted-foreground">Asset ID:</span>
-                            <p className="font-medium">{request.approvals.finance.assetMatch.assetId}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Employee:</span>
+                           <div>
+                             <span className="text-muted-foreground">Asset ID:</span>
+                             <p className="font-medium">{request.approvals.finance.assetMatch.assetId}</p>
+                           </div>
+                           {request.approvals.finance.assetMatch.assetDetail && (
+                             <div>
+                               <span className="text-muted-foreground">Detail:</span>
+                               <p className="font-medium">{request.approvals.finance.assetMatch.assetDetail}</p>
+                             </div>
+                           )}
+                           <div>
+                             <span className="text-muted-foreground">Employee:</span>
                             <p className="font-medium">{request.approvals.finance.assetMatch.employeeName}</p>
                           </div>
                           <div>

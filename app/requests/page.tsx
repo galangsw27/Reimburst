@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Filter, Calendar, X, Plus, CheckCircle, XCircle, Send } from 'lucide-react'
+import { Filter, Calendar, X, Plus, CheckCircle, XCircle, Send, Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 /**
@@ -70,8 +70,11 @@ export default function RequestListPage() {
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [showBatchApproveModal, setShowBatchApproveModal] = useState(false)
   const [pendingApprovalRequest, setPendingApprovalRequest] = useState<Reimbursement | null>(null)
   const [pendingSubmitRequests, setPendingSubmitRequests] = useState<Reimbursement[]>([])
+  const [pendingBatchApproveRequests, setPendingBatchApproveRequests] = useState<Reimbursement[]>([])
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [approvalComment, setApprovalComment] = useState('')
 
@@ -280,6 +283,66 @@ export default function RequestListPage() {
     if (!user || requests.length === 0) return
     setPendingSubmitRequests(requests)
     setShowSubmitModal(true)
+  }
+
+  // Handle batch approve - Show confirmation modal first
+  const handleBatchApprove = (requests: Reimbursement[]) => {
+    if (!user || requests.length === 0) return
+    setPendingBatchApproveRequests(requests)
+    setShowBatchApproveModal(true)
+  }
+
+  // Confirm batch approve
+  const confirmBatchApprove = async () => {
+    if (!user || pendingBatchApproveRequests.length === 0) return
+    
+    setIsBatchProcessing(true)
+    try {
+      const ids = pendingBatchApproveRequests.map(r => r.id)
+      const role = user.role
+      
+      let newStatus: ReimbursementStatus = 'pending'
+      if (role === 'lead') newStatus = 'approved_by_lead'
+      else if (role === 'head') newStatus = 'approved_by_head'
+      else if (role === 'finance') newStatus = 'approved_by_finance'
+
+      const response = await fetch('/api/reimbursements/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'approve',
+          ids,
+          data: {
+            status: newStatus,
+            approvals: {
+              [role]: {
+                approved: true,
+                by: user.name,
+                date: new Date().toISOString(),
+                comment: 'Batch approved'
+              }
+            }
+          }
+        })
+      })
+
+      if (response.ok) {
+        refetch()
+        setShowBatchApproveModal(false)
+        setPendingBatchApproveRequests([])
+      } else {
+        const errorData = await response.json()
+        alert(`Batch approval failed: ${errorData.error}`)
+      }
+    } catch (error) {
+      console.error('Batch approval error:', error)
+      alert('An unexpected error occurred during batch approval')
+    } finally {
+      setIsBatchProcessing(false)
+    }
   }
 
   // Confirm batch submit - Lead submits to Head, Head submits to Finance
@@ -504,6 +567,7 @@ export default function RequestListPage() {
             onApprove={handleApprove}
             onReject={handleReject}
             onBatchSubmit={handleBatchSubmit}
+            onBatchApprove={handleBatchApprove}
           />
         </div>
 
@@ -514,6 +578,73 @@ export default function RequestListPage() {
           onSuccess={handleRequestCreated}
           initialProject={selectedProject?.name}
         />
+
+        {/* Batch Approve Confirmation Modal */}
+        {showBatchApproveModal && pendingBatchApproveRequests.length > 0 && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setShowBatchApproveModal(false)}
+          >
+            <motion.div
+              className="bg-background border border-border rounded-lg p-6 max-w-lg w-full"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <CheckCircle className="w-6 h-6 text-green-500" />
+                Konfirmasi Batch Approve
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                Apakah Anda yakin ingin approve {pendingBatchApproveRequests.length} reimbursement sekaligus?
+              </p>
+              <div className="space-y-3 mb-6 p-4 bg-muted/50 rounded-lg max-h-60 overflow-y-auto">
+                {pendingBatchApproveRequests.map((req, index) => (
+                  <div key={req.id} className="grid grid-cols-2 gap-3 text-sm border-b border-border pb-2 last:border-0 last:pb-0">
+                    <div>
+                      <span className="text-muted-foreground">#{index + 1} - </span>
+                      <span className="font-medium">{req.employeeName}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-medium">Rp {req.amount.toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-border">
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span>Total ({pendingBatchApproveRequests.length} request)</span>
+                    <span>Rp {pendingBatchApproveRequests.reduce((sum, r) => sum + r.amount, 0).toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowBatchApproveModal(false)} className="flex-1">
+                  Batal
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={confirmBatchApprove}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  disabled={isBatchProcessing}
+                >
+                  {isBatchProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Ya, Approve Semua
+                    </>
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
 
         {/* Approve Confirmation Modal */}
         {showApproveModal && pendingApprovalRequest && (

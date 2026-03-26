@@ -167,15 +167,15 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
                 Project
               </Label>
               <Select
-                value={localFilters.projectId || ''}
-                onValueChange={(value) => handleFilterChange('projectId', value || undefined)}
+                value={localFilters.projectId || 'all'}
+                onValueChange={(value) => handleFilterChange('projectId', value === 'all' ? undefined : value)}
                 disabled={loading || loadingProjects}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All Projects" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Projects</SelectItem>
+                  <SelectItem value="all">All Projects</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       <div className="flex flex-col">
@@ -222,9 +222,9 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
-                value={localFilters.status?.join(',') || ''}
+                value={localFilters.status?.join(',') || 'all'}
                 onValueChange={(value) => {
-                  const statuses = value ? value.split(',') as ReimbursementStatus[] : undefined
+                  const statuses = value === 'all' ? undefined : (value ? value.split(',') as ReimbursementStatus[] : undefined)
                   handleFilterChange('status', statuses)
                 }}
                 disabled={loading}
@@ -233,7 +233,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   {statusOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}

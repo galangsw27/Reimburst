@@ -164,12 +164,18 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-2 font-semibold">Demo Accounts:</p>
+              <p className="text-xs text-muted-foreground mb-2 font-semibold">Akun Existing:</p>
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p>• User: user1@company.com</p>
-                <p>• Head: head@company.com</p>
-                <p>• Lead: lead1@company.com</p>
-                <p>• Finance: finance@company.com</p>
+                <p className="font-medium text-foreground">Tester:</p>
+                <p>• alice.tester@airism.com</p>
+                <p>• bob.tester@airism.com</p>
+                <p className="font-medium text-foreground mt-2">Lead:</p>
+                <p>• john.lead@airism.com</p>
+                <p>• sarah.lead@airism.com</p>
+                <p className="font-medium text-foreground mt-2">Head:</p>
+                <p>• michael.head@airism.com</p>
+                <p className="font-medium text-foreground mt-2">Finance:</p>
+                <p>• lisa.finance@airism.com</p>
                 <p className="mt-2 italic">Password: password123</p>
               </div>
             </div>

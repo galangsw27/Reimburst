@@ -11,7 +11,7 @@
  */
 
 import axios from 'axios'
-import { Reimbursement, ReimbursementStatus, OCRResponse, AssetMatchResponse } from '@/lib/types'
+import { Reimbursement, ReimbursementStatus, OCRResponse, AssetMatchResponse, AssetMatchResult } from '@/lib/types'
 
 /**
  * Get runtime configuration from API
@@ -111,9 +111,25 @@ export async function matchAsset(description: string): Promise<AssetMatchRespons
       description,
     })
     
+    const output = response.data.output || response.data.data || response.data
+    const asset = output.asset || output
+    
+    const matchResult: AssetMatchResult = {
+      matched: output.matched || false,
+      assetId: asset.asset_id || output.assetId || undefined,
+      assetName: asset.asset_name || output.assetName || undefined,
+      assetDetail: asset.asset_detail || output.assetDetail || undefined,
+      employeeName: asset.employee_name || output.employeeName || undefined,
+      department: asset.department || output.department || undefined,
+      matchedBy: output.matchedField || output.matchedBy || 'email',
+      matchedValue: output.searchedFor || output.matchedValue || description,
+      confidence: output.confidence || 0,
+      verifiedDate: output.verifiedDate || new Date().toISOString()
+    }
+    
     return {
       success: true,
-      data: response.data,
+      data: matchResult,
     }
   } catch (error) {
     console.error('Asset matching failed:', error)

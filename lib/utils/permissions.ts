@@ -185,8 +185,8 @@ export const ROLE_MATRIX: RoleMatrix = {
   },
   'nav.reports': {
     tester: false,
-    lead: false,
-    head: false,
+    lead: true,
+    head: true,
     finance: true,
   },
 }

@@ -5,6 +5,7 @@ import { Reimbursement, ReimbursementStatus, UserRole } from '@/lib/types'
 import { Button } from './ui/button'
 import { ChevronLeft, ChevronRight, Check, X, Send, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAuth } from '@/providers/AuthProvider'
+import { motion, AnimatePresence } from 'framer-motion'
 
 /**
  * Props for the RequestTable component
@@ -22,6 +23,8 @@ export interface RequestTableProps {
   onReject?: (request: Reimbursement) => void
   /** Callback when batch submit is clicked (for lead/head) */
   onBatchSubmit?: (requests: Reimbursement[]) => void
+  /** Callback when batch approve is clicked (for lead/head) */
+  onBatchApprove?: (requests: Reimbursement[]) => void
 }
 
 /**
@@ -127,12 +130,14 @@ export function RequestTable({
   loading = false,
   onApprove,
   onReject,
-  onBatchSubmit
+  onBatchSubmit,
+  onBatchApprove
 }: RequestTableProps) {
   const { user } = useAuth()
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set())
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const itemsPerPage = 10
 
   // Check if user is lead, head, or finance (can approve)
@@ -192,6 +197,15 @@ export function RequestTable({
     }
   }
 
+  // Handle batch approve
+  const handleBatchApprove = () => {
+    if (onBatchApprove && selectedRequests.size > 0) {
+      const selectedReqs = requests.filter(req => selectedRequests.has(req.id))
+      onBatchApprove(selectedReqs)
+      setSelectedRequests(new Set())
+    }
+  }
+
   // Sort requests by date descending by default
   const sortedRequests = useMemo(() => {
     return [...requests].sort((a, b) => {
@@ -245,6 +259,17 @@ export function RequestTable({
               <X className="w-4 h-4 mr-1" />
               Clear
             </Button>
+            {onBatchApprove && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={handleBatchApprove}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Check className="w-4 h-4 mr-1" />
+                Approve
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={handleBatchSubmit}
@@ -465,8 +490,48 @@ export function RequestTable({
                               <span className="font-medium max-w-[150px] truncate block" title={request.leadName || '-'}>{request.leadName || '-'}</span>
                             </div>
                             <div className="col-span-2">
-                              <span className="text-muted-foreground block">Folder Evidence</span>
-                              <span className="font-medium max-w-[300px] truncate block" title={(request as any).folderEvidence || '-'}>{(request as any).folderEvidence || '-'}</span>
+                              <span className="text-muted-foreground block mb-1">Evidence Preview</span>
+                              {request.receiptImage ? (
+                                <div className="flex gap-2">
+                                  <div onClick={() => setPreviewImage(request.receiptImage as string)} className="inline-block relative" title="Klik untuk memperbesar">
+                                    <span className="absolute -top-1 -left-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">1</span>
+                                    <img 
+                                      src={request.receiptImage} 
+                                      alt="Evidence" 
+                                      className="max-h-24 object-cover border rounded cursor-pointer hover:opacity-80 transition-opacity"
+                                    />
+                                  </div>
+                                  {(request as any).receiptImage2 && (
+                                    <div onClick={() => setPreviewImage((request as any).receiptImage2)} className="inline-block relative" title="Evidence Pendukung - Klik untuk memperbesar">
+                                      <span className="absolute -top-1 -left-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">2</span>
+                                      <img 
+                                        src={(request as any).receiptImage2} 
+                                        alt="Evidence 2" 
+                                        className="max-h-24 object-cover border border-amber-500 rounded cursor-pointer hover:opacity-80 transition-opacity"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="font-medium block">-</span>
+                              )}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground block mb-1">Folder Evidence</span>
+                              <span className="font-medium max-w-[300px] truncate block" title={(request as any).folderEvidence || '-'}>
+                                {(request as any).folderEvidence ? (
+                                  ((request as any).folderEvidence.startsWith('http') || (request as any).folderEvidence.includes('drive.google.com')) ? (
+                                    <a href={(request as any).folderEvidence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                      <span className="inline-flex items-center justify-center w-4 h-4 bg-green-500 rounded-full text-[10px] font-bold text-black mr-1">1</span>
+                                      Buka Folder
+                                    </a>
+                                  ) : (
+                                    (request as any).folderEvidence
+                                  )
+                                ) : (
+                                  '-'
+                                )}
+                              </span>
                             </div>
                             <div className="col-span-2">
                               <span className="text-muted-foreground block">Remark</span>
@@ -549,6 +614,41 @@ export function RequestTable({
           </div>
         </div>
       )}
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div
+              className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute -top-12 right-0 text-white hover:bg-white/20 z-10"
+                onClick={() => setPreviewImage(null)}
+              >
+                <X className="w-6 h-6" />
+              </Button>
+              <img
+                src={previewImage}
+                alt="Evidence Full View"
+                className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

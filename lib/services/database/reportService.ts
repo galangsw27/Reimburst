@@ -21,6 +21,7 @@ import {
   ReportSummary,
 } from '../types';
 import { db } from '@/lib/database/connection';
+import { getDatabaseConfig } from '@/lib/config/database';
 import * as ExcelJS from 'exceljs';
 
 /**
@@ -227,9 +228,17 @@ export class DatabaseReportService implements IReportService {
    * @returns Promise resolving to array of reimbursements matching the filters
    * 
    * Requirements:
-   * - 6.1: Support filtering by project, user, lead, and date range
+    * - 6.1: Support filtering by project, user, lead, and date range
    */
   async getReportData(filters: ReportFilters): Promise<Reimbursement[]> {
+    // Ensure database is initialized
+    if (!db.isInitialized()) {
+      console.log('DEBUG: Database not initialized, initializing now...');
+      const config = getDatabaseConfig();
+      console.log('DEBUG: Database config - mode:', config.mode, 'connectionString:', config.connectionString);
+      db.initialize(config.connectionString!, config.poolConfig!);
+    }
+    
     // Build the base query with JOINs
     let query = `
       SELECT 
@@ -345,6 +354,13 @@ export class DatabaseReportService implements IReportService {
    */
   async validateReportFilters(filters: ReportFilters): Promise<boolean> {
     try {
+      // Check if database is initialized
+      if (!db.isInitialized()) {
+        console.log('DEBUG: Database not initialized, initializing now...');
+        const config = getDatabaseConfig();
+        db.initialize(config.connectionString!, config.poolConfig!);
+      }
+      
       // Validate date range
       if (filters.dateFrom && filters.dateTo) {
         if (filters.dateFrom > filters.dateTo) {
@@ -352,10 +368,10 @@ export class DatabaseReportService implements IReportService {
         }
       }
 
-      // Validate project ID exists if provided
+      // Validate project ID format if provided (should be numeric string)
       if (filters.projectId) {
-        const projectCheck = await db.query('SELECT id FROM projects WHERE id = $1', [parseInt(filters.projectId)]);
-        if (projectCheck.rows.length === 0) {
+        const projectIdNum = parseInt(filters.projectId);
+        if (isNaN(projectIdNum) || projectIdNum <= 0) {
           return false;
         }
       }
@@ -371,6 +387,7 @@ export class DatabaseReportService implements IReportService {
 
       return true;
     } catch (error) {
+      console.error('Error validating report filters:', error);
       return false;
     }
   }
@@ -388,6 +405,15 @@ export class DatabaseReportService implements IReportService {
    * - 6.1: Provide report summary statistics
    */
   async getReportSummary(filters: ReportFilters): Promise<ReportSummary> {
+    // Ensure database is initialized
+    if (!db.isInitialized()) {
+      console.log('DEBUG: Database not initialized in getReportSummary, initializing now...');
+      const config = getDatabaseConfig();
+      console.log('DEBUG: Database config - mode:', config.mode, 'connectionString:', config.connectionString);
+      db.initialize(config.connectionString!, config.poolConfig!);
+    }
+    
+    try {
     // Build the base query for summary statistics
     let baseQuery = `
       FROM reimbursements r
@@ -448,7 +474,9 @@ export class DatabaseReportService implements IReportService {
       ${whereClause}
     `;
 
+    console.log('DEBUG: Executing totalQuery:', totalQuery, 'params:', params);
     const totalResult = await db.query(totalQuery, params);
+    console.log('DEBUG: Query result:', totalResult.rows);
     const totalData = totalResult.rows[0];
 
     // Get status breakdown
@@ -504,6 +532,10 @@ export class DatabaseReportService implements IReportService {
       statusBreakdown,
       projectBreakdown,
     };
+    } catch (error) {
+      console.error('Error getting report summary:', error);
+      throw error;
+    }
   }
 
   /**

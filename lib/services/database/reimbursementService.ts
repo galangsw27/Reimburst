@@ -75,6 +75,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
         COALESCE(r.date, r.submission_date::text) as date,
         COALESCE(r.project, 'MaxStream') as project,
         r.receipt_image as "receiptImage",
+        r.receipt_image_2 as "receiptImage2",
         r.asset,
         r.approvals,
         r.rejection_reason as "rejectionReason",
@@ -93,7 +94,8 @@ export class DatabaseReimbursementService implements IReimbursementService {
         r.discount,
         r.login_status as "loginStatus",
         r.by,
-        r.folder_evidence as "folderEvidence"
+        r.folder_evidence as "folderEvidence",
+        r.folder_evidence_2 as "folderEvidence2"
       FROM reimbursements r
       INNER JOIN users u ON r.user_id = u.id
       LEFT JOIN users l ON COALESCE(r.lead_id, u.lead_id) = l.id
@@ -164,6 +166,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date,
       project: row.project,
       receiptImage: row.receiptImage,
+      receiptImage2: row.receiptImage2,
       asset: row.asset,
       approvals: row.approvals || {},
       rejectionReason: row.rejectionReason,
@@ -183,6 +186,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       loginStatus: row.loginStatus,
       by: row.by,
       folderEvidence: row.folderEvidence,
+      folderEvidence2: row.folderEvidence2,
     } as any));
   }
 
@@ -212,6 +216,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
         COALESCE(r.date, r.submission_date::text) as date,
         COALESCE(r.project, 'MaxStream') as project,
         r.receipt_image as "receiptImage",
+        r.receipt_image_2 as "receiptImage2",
         r.asset,
         r.approvals,
         r.rejection_reason as "rejectionReason",
@@ -230,7 +235,8 @@ export class DatabaseReimbursementService implements IReimbursementService {
         r.discount,
         r.login_status as "loginStatus",
         r.by,
-        r.folder_evidence as "folderEvidence"
+        r.folder_evidence as "folderEvidence",
+        r.folder_evidence_2 as "folderEvidence2"
       FROM reimbursements r
       INNER JOIN users u ON r.user_id = u.id
       LEFT JOIN users l ON COALESCE(r.lead_id, u.lead_id) = l.id
@@ -255,6 +261,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date,
       project: row.project,
       receiptImage: row.receiptImage,
+      receiptImage2: row.receiptImage2,
       asset: row.asset,
       approvals: row.approvals || {},
       rejectionReason: row.rejectionReason,
@@ -274,6 +281,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       loginStatus: row.loginStatus,
       by: row.by,
       folderEvidence: row.folderEvidence,
+      folderEvidence2: row.folderEvidence2,
     } as any;
   }
 
@@ -333,21 +341,21 @@ export class DatabaseReimbursementService implements IReimbursementService {
     const query = `
       INSERT INTO reimbursements (
         user_id, employee_name, employee_email, amount, description, status, 
-        date, project, project_id, asset_id, receipt_image, lead_id, lead_name, submission_date, approvals,
+        date, project, project_id, asset_id, receipt_image, receipt_image_2, lead_id, lead_name, submission_date, approvals,
         transaction_id, transaction_time, payment_method, transaction_amount, 
-        admin_fee, shipping_fee, service_fee, discount, login_status, by, folder_evidence
+        admin_fee, shipping_fee, service_fee, discount, login_status, by, folder_evidence, folder_evidence_2
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
       RETURNING id::text, user_id::text as "userId", employee_name as "employeeName", 
                 employee_email as "employeeEmail", amount, description, status, date, project,
                 project_id::text as "projectId", asset_id::text as "assetId",
-                receipt_image as "receiptImage", lead_id::text as "leadId", lead_name as "leadName",
+                receipt_image as "receiptImage", receipt_image_2 as "receiptImage2", lead_id::text as "leadId", lead_name as "leadName",
                 approvals, created_at as "createdAt", updated_at as "updatedAt",
                 transaction_id as "transactionId", transaction_time as "transactionTime",
                 payment_method as "paymentMethod", transaction_amount as "transactionAmount",
                 admin_fee as "adminFee", shipping_fee as "shippingFee", 
                 service_fee as "serviceFee", discount, login_status as "loginStatus",
-                by, folder_evidence as "folderEvidence"
+                by, folder_evidence as "folderEvidence", folder_evidence_2 as "folderEvidence2"
     `;
 
     const result = await db.query(query, [
@@ -362,6 +370,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       data.projectId ? parseInt(data.projectId) : null,
       data.assetId ? parseInt(data.assetId) : null,
       data.receiptImage || null,
+      (data as any).receiptImage2 || null,
       user.lead_id || null,
       leadName,
       submissionDate,
@@ -377,6 +386,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       (data as any).loginStatus || null,
       (data as any).by || null,
       (data as any).folderEvidence || null,
+      (data as any).evidence2Image || null,
     ]);
 
     const row = result.rows[0];
@@ -392,6 +402,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       date: row.date,
       project: row.project,
       receiptImage: row.receiptImage,
+      receiptImage2: row.receiptImage2,
       approvals: row.approvals || {},
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
@@ -409,6 +420,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       loginStatus: row.loginStatus,
       by: row.by,
       folderEvidence: row.folderEvidence,
+      folderEvidence2: row.folderEvidence2,
     } as any;
   }
 
@@ -491,6 +503,24 @@ export class DatabaseReimbursementService implements IReimbursementService {
     params.push(data.receiptImage);
     paramIndex++;
   }
+
+  if ((data as any).receiptImage2 !== undefined) {
+    updates.push(`receipt_image_2 = $${paramIndex}`);
+    params.push((data as any).receiptImage2);
+    paramIndex++;
+  }
+
+  if ((data as any).folderEvidence !== undefined) {
+    updates.push(`folder_evidence = $${paramIndex}`);
+    params.push((data as any).folderEvidence);
+    paramIndex++;
+  }
+
+  if ((data as any).evidence2Image !== undefined) {
+    updates.push(`folder_evidence_2 = $${paramIndex}`);
+    params.push((data as any).evidence2Image);
+    paramIndex++;
+  }
   
   if (updates.length === 0) {
     // No updates to perform, just return the current reimbursement
@@ -520,25 +550,32 @@ export class DatabaseReimbursementService implements IReimbursementService {
     throw new Error('Reimbursement not found after update');
   }
 
-  return updated;
-}
+    return updated;
+  }
 
   /**
-   * Delete a reimbursement by ID
-   * 
-   * Uses parameterized query to prevent SQL injection.
-   * 
-   * @param id - The reimbursement ID to delete
-   * @returns Promise resolving when deletion is complete
-   * @throws Error if reimbursement not found
+   * Batch approve multiple reimbursements
+   *
+   * Updates multiple reimbursements with the same data in a batch operation.
+   * Each reimbursement is updated individually and the results are collected.
+   *
+   * @param ids - Array of reimbursement IDs to update
+   * @param data - The update data to apply to all reimbursements
+   * @returns Promise resolving to array of updated reimbursements
+   * @throws Error if any reimbursement update fails
    */
-  async deleteReimbursement(id: string): Promise<void> {
-    const query = 'DELETE FROM reimbursements WHERE id = $1 RETURNING id';
-    const result = await db.query(query, [id]);
+  async batchApprove(
+    ids: string[],
+    data: UpdateReimbursementInput
+  ): Promise<Reimbursement[]> {
+    const updatedReimbursements: Reimbursement[] = [];
 
-    if (result.rows.length === 0) {
-      throw new Error('Reimbursement not found');
+    for (const id of ids) {
+      const updated = await this.updateReimbursement(id, data);
+      updatedReimbursements.push(updated);
     }
+
+    return updatedReimbursements;
   }
 
   /**
@@ -619,6 +656,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
         COALESCE(r.date, r.submission_date::text) as date,
         COALESCE(r.project, 'MaxStream') as project,
         r.receipt_image as "receiptImage",
+        r.receipt_image_2 as "receiptImage2",
         r.asset,
         r.approvals,
         r.rejection_reason as "rejectionReason",
@@ -637,7 +675,8 @@ export class DatabaseReimbursementService implements IReimbursementService {
         r.discount,
         r.login_status as "loginStatus",
         r.by,
-        r.folder_evidence as "folderEvidence"
+        r.folder_evidence as "folderEvidence",
+        r.folder_evidence_2 as "folderEvidence2"
       FROM reimbursements r
       INNER JOIN users u ON r.user_id = u.id
       LEFT JOIN users l ON COALESCE(r.lead_id, u.lead_id) = l.id
@@ -658,6 +697,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date,
       project: row.project,
       receiptImage: row.receiptImage,
+      receiptImage2: row.receiptImage2,
       asset: row.asset,
       approvals: row.approvals || {},
       rejectionReason: row.rejectionReason,
@@ -677,6 +717,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       loginStatus: row.loginStatus,
       by: row.by,
       folderEvidence: row.folderEvidence,
+      folderEvidence2: row.folderEvidence2,
     } as any));
   }
 
@@ -866,5 +907,23 @@ export class DatabaseReimbursementService implements IReimbursementService {
     }
 
     return updated;
+  }
+
+  /**
+   * Delete a reimbursement by ID
+   *
+   * Uses parameterized query to prevent SQL injection.
+   *
+   * @param id - The reimbursement ID to delete
+   * @returns Promise resolving when deletion is complete
+   * @throws Error if reimbursement not found
+   */
+  async deleteReimbursement(id: string): Promise<void> {
+    const query = 'DELETE FROM reimbursements WHERE id = $1 RETURNING id';
+    const result = await db.query(query, [id]);
+
+    if (result.rows.length === 0) {
+      throw new Error('Reimbursement not found');
+    }
   }
 }

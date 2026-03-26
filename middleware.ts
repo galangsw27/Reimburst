@@ -40,7 +40,7 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https: blob:",
-    "connect-src 'self' https://n8ngal2.app.n8n.cloud https://script.google.com https://accounts.google.com",
+    "connect-src 'self' https://n8nreimburst.app.n8n.cloud https://primary-production-47c3.up.railway.app https://aisha.salt.id https://script.google.com https://accounts.google.com",
     "frame-src 'self' https://accounts.google.com",
     "object-src 'none'",
     "base-uri 'self'",

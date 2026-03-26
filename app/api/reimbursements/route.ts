@@ -13,6 +13,9 @@ import { getReimbursementService } from '@/lib/services/factory';
 import { ReimbursementFilters } from '@/lib/services/types';
 import { ReimbursementStatus } from '@/lib/types';
 import { authenticateAndAuthorize } from '@/lib/auth/middleware';
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * GET /api/reimbursements
@@ -126,6 +129,112 @@ export async function POST(request: NextRequest) {
     }
     
     const reimbursement = await reimbursementService.createReimbursement(data);
+
+    // Save evidence to Google Drive via n8n webhook
+    const gdriveWebhookUrl = process.env.N8N_GDRIVE_WEBHOOK_URL;
+    console.log('[GDrive] Webhook URL:', gdriveWebhookUrl);
+    console.log('[GDrive] folderEvidence:', data.folderEvidence);
+    console.log('[GDrive] evidence2Image:', data.evidence2Image);
+    
+    if (gdriveWebhookUrl && (data.folderEvidence || data.evidence2Image)) {
+      try {
+        const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), 'public', 'uploads');
+        
+        // Function to save single evidence to GDrive
+        const saveToGdrive = async (filePath: string | null, label: string): Promise<string | null> => {
+          if (!filePath) return null;
+          
+          // Check if it's a base64 string (already uploaded, not from local storage)
+          if (filePath.startsWith('data:')) {
+            // Already a base64 data URL
+            const base64Data = filePath.split(',')[1];
+            const ext = filePath.match(/data:image\/(\w+);base64/)?.[1] || 'jpg';
+            const fileName = `${label}_${Date.now()}.${ext}`;
+            
+            console.log(`[GDrive] Sending ${label} to webhook...`, { reimbursementId: reimbursement.id, projectName: data.project, fileName });
+            
+            try {
+              const response = await axios.post(gdriveWebhookUrl, {
+                reimbursementId: reimbursement.id,
+                projectName: data.project,
+                fileName: fileName,
+                base64: base64Data
+              }, { timeout: 30000 });
+              
+              console.log(`[GDrive] Response for ${label}:`, response.data);
+              
+              if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
+                return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
+              }
+            } catch (gdriveError) {
+              console.error(`Failed to save ${label} to GDrive:`, gdriveError);
+            }
+            return null;
+          }
+          
+          // It's a local file path - read and convert to base64
+          const fullPath = path.join(uploadDir, path.basename(filePath));
+          console.log(`[GDrive] Checking local file:`, fullPath, 'exists:', fs.existsSync(fullPath));
+          if (fs.existsSync(fullPath)) {
+            const fileBuffer = fs.readFileSync(fullPath);
+            const base64Data = fileBuffer.toString('base64');
+            const ext = path.extname(filePath).slice(1) || 'jpg';
+            const fileName = `${label}_${path.basename(filePath)}`;
+            
+            console.log(`[GDrive] Sending ${label} (local file) to webhook...`, { reimbursementId: reimbursement.id, projectName: data.project, fileName });
+            
+            try {
+              const response = await axios.post(gdriveWebhookUrl, {
+                reimbursementId: reimbursement.id,
+                projectName: data.project,
+                fileName: fileName,
+                base64: base64Data
+              }, { timeout: 30000 });
+              
+              console.log(`[GDrive] Response for ${label}:`, response.data);
+              
+              if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
+                return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
+              }
+            } catch (gdriveError) {
+              console.error(`Failed to save ${label} to GDrive:`, gdriveError);
+            }
+          }
+          return null;
+        };
+
+        // Save evidence 1 (main evidence) to GDrive
+        const gdriveUrl1 = await saveToGdrive(data.folderEvidence, 'evidence1');
+        console.log('[GDrive] gdriveUrl1:', gdriveUrl1);
+        
+        // Save evidence 2 (pendukung) to GDrive
+        const gdriveUrl2 = await saveToGdrive(data.evidence2Image, 'evidence2');
+        console.log('[GDrive] gdriveUrl2:', gdriveUrl2);
+
+        // Update reimbursement with GDrive URLs if successful
+        if (gdriveUrl1 || gdriveUrl2) {
+          const updateData: any = {};
+          if (gdriveUrl1) updateData.folderEvidence = gdriveUrl1;
+          if (gdriveUrl2) {
+            updateData.evidence2Image = gdriveUrl2;
+          }
+          
+          console.log('[GDrive] Updating reimbursement with:', updateData);
+          
+          await reimbursementService.updateReimbursement(reimbursement.id, updateData);
+          
+          // Refresh the reimbursement data
+          const updated = await reimbursementService.getReimbursementById(reimbursement.id);
+          if (updated) {
+            return NextResponse.json(updated, { status: 201 });
+          }
+        }
+      } catch (error) {
+        console.error('Error saving evidence to GDrive:', error);
+        // Continue even if GDrive save fails - don't block reimbursement creation
+      }
+    }
+    
     return NextResponse.json(reimbursement, { status: 201 });
   } catch (error) {
     console.error('Error creating reimbursement:', error);

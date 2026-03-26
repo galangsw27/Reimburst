@@ -26,6 +26,8 @@ export interface RequestPanelProps {
   onReject?: (request: Reimbursement) => void
   /** Callback when batch submit is clicked (for lead/head) */
   onBatchSubmit?: (requests: Reimbursement[]) => void
+  /** Callback when batch approve is clicked (for lead/head) */
+  onBatchApprove?: (requests: Reimbursement[]) => void
   /** Optional custom class name */
   className?: string
 }
@@ -94,6 +96,7 @@ export function RequestPanel({
   onApprove,
   onReject,
   onBatchSubmit,
+  onBatchApprove,
   className,
 }: RequestPanelProps) {
   return (
@@ -161,6 +164,7 @@ export function RequestPanel({
               onApprove={onApprove}
               onReject={onReject}
               onBatchSubmit={onBatchSubmit}
+              onBatchApprove={onBatchApprove}
               loading={loading}
             />
           </div>

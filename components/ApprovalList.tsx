@@ -44,7 +44,7 @@ interface ApprovalListProps {
 
 export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
   const { user } = useAuth()
-  const { reimbursements, updateReimbursement, mounted } = useReimbursements()
+  const { reimbursements, updateReimbursement, mounted, refetch } = useReimbursements()
   
   const [selectedRequest, setSelectedRequest] = useState<Reimbursement | null>(null)
   const [comment, setComment] = useState('')
@@ -56,6 +56,9 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
   const [assetMatchResult, setAssetMatchResult] = useState<AssetMatchResult | null>(null)
   const [checkedRequests, setCheckedRequests] = useState<Set<string>>(new Set())
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBatchApproving, setIsBatchApproving] = useState(false)
+  const [showBatchApproveModal, setShowBatchApproveModal] = useState(false)
   
   // Filters
   const [projectFilter, setProjectFilter] = useState<string>('all')
@@ -165,6 +168,94 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
     })
   }, [sortedRequests, projectFilter, leadFilter, dateFrom, dateTo])
 
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredRequests.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredRequests.map(r => r.id)))
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const handleBatchApprove = async () => {
+    if (!user || selectedIds.size === 0) return
+    
+    setIsBatchApproving(true)
+    setValidationErrors([])
+    
+    try {
+      const idsArray = Array.from(selectedIds)
+      const role = user.role
+      
+      // Validation for Finance
+      if (role === 'finance') {
+        const unchecked = idsArray.filter(id => !checkedRequests.has(id))
+        if (unchecked.length > 0) {
+          throw new Error(`${unchecked.length} request(s) belum dilakukan check asset.`)
+        }
+      }
+
+      const approvalData: any = {
+        status: '',
+        approvals: {},
+        approvalDate: new Date().toISOString()
+      }
+
+      // Determine next status and approvals object
+      // This is simplified for batch - we assume same logic for all selected items
+      // In a more complex scenario, we'd need to calculate per-item
+      
+      if (role === 'finance') {
+        approvalData.status = 'approved_by_finance'
+        // For finance batch, we might not have individual comments/results
+        // Use a generic batch approval comment
+      } else if (role === 'head') {
+        approvalData.status = 'approved_by_head'
+      } else if (role === 'lead') {
+        approvalData.status = 'approved_by_lead'
+      }
+
+      const response = await apiClient.post('/api/reimbursements/batch', {
+        action: 'approve',
+        ids: idsArray,
+        data: {
+          status: approvalData.status,
+          approvals: {
+            // This will be merged in the backend or we can just send the specific role approval
+            [role]: {
+              approved: true,
+              by: user.name,
+              date: new Date().toISOString(),
+              comment: 'Batch approved'
+            }
+          }
+        }
+      })
+
+      if (response.status === 200) {
+        setSelectedIds(new Set())
+        setShowBatchApproveModal(false)
+        onUpdate?.()
+        // Refresh local state bypassing cache
+        refetch()
+      }
+    } catch (error: any) {
+      console.error('Batch approval failed:', error)
+      setValidationErrors([error.message || 'Batch approval failed'])
+    } finally {
+      setIsBatchApproving(false)
+    }
+  }
 
   // Show approve confirmation modal
   const showApproveConfirmation = (request: Reimbursement) => {
@@ -437,19 +528,21 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
         throw new Error('Invalid response from asset matching service')
       }
       
-      // Response structure: { data: { matched, assetId, assetName, ... } }
-      const data = response.data.data || response.data
+      // Response structure: { output: { matched, asset: { ... }, ... } }
+      const output = response.data.output || response.data.data || response.data
+      const asset = output.asset || output
       
       const matchResult: AssetMatchResult = {
-        matched: data.matched || false,
-        assetId: data.assetId || undefined,
-        assetName: data.assetName || undefined,
-        employeeName: data.employeeName || undefined,
-        department: data.department || undefined,
-        matchedBy: data.matchedBy || 'email',
-        matchedValue: data.matchedValue || request.employeeEmail,
-        confidence: data.confidence || 0,
-        verifiedDate: data.verifiedDate || new Date().toISOString()
+        matched: output.matched || false,
+        assetId: asset.asset_id || output.assetId || undefined,
+        assetName: asset.asset_name || output.assetName || undefined,
+        assetDetail: asset.asset_detail || output.assetDetail || undefined,
+        employeeName: asset.employee_name || output.employeeName || undefined,
+        department: asset.department || output.department || undefined,
+        matchedBy: output.matchedField || output.matchedBy || 'email',
+        matchedValue: output.searchedFor || output.matchedValue || request.employeeEmail,
+        confidence: output.confidence || 0,
+        verifiedDate: output.verifiedDate || new Date().toISOString()
       }
       
       // Validate match result
@@ -758,6 +851,38 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
           </div>
         </CardHeader>
         <CardContent>
+          {filteredRequests.length > 0 && (
+            <div className="flex items-center justify-between mb-4 p-2 bg-muted/30 rounded-lg border border-border/50">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === filteredRequests.length && filteredRequests.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium">Select All</span>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.size} selected
+                </span>
+              </div>
+              
+              {selectedIds.size > 0 && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => setShowBatchApproveModal(true)}
+                  disabled={isBatchApproving}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Batch Approve ({selectedIds.size})
+                </Button>
+              )}
+            </div>
+          )}
+
           {filteredRequests.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -770,9 +895,19 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                   key={request.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="border border-border rounded-lg p-4 hover:border-primary/50 transition-all"
+                  className="border border-border rounded-lg p-4 hover:border-primary/50 transition-all flex gap-4"
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="pt-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(request.id)}
+                      onChange={() => toggleSelect(request.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                  </div>
+                  
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="font-semibold text-lg">{request.id}</h3>
                       <p className="text-sm text-muted-foreground">
@@ -926,8 +1061,14 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                               <span className="text-muted-foreground">Asset Name:</span>
                               <p className="font-medium">{assetMatchResult.assetName}</p>
                             </div>
-                            <div>
-                              <span className="text-muted-foreground">Employee:</span>
+                            {assetMatchResult.assetDetail && (
+                              <div className="bg-white/5 p-2 rounded">
+                                <span className="text-muted-foreground block mb-1">Asset Detail:</span>
+                                <p className="font-medium">{assetMatchResult.assetDetail}</p>
+                              </div>
+                            )}
+                            <div className="bg-white/5 p-2 rounded">
+                              <span className="text-muted-foreground block mb-1">Employee:</span>
                               <p className="font-medium">{assetMatchResult.employeeName}</p>
                             </div>
                             <div>
@@ -984,13 +1125,72 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                       </div>
                     </motion.div>
                   )}
-                </motion.div>
-              ))}
+                </div>
+              </motion.div>
+            ))}
             </div>
           )}
         </CardContent>
       </Card>
 
+
+      {/* Batch Approve Confirmation Modal */}
+      {showBatchApproveModal && selectedIds.size > 0 && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setShowBatchApproveModal(false)}
+        >
+          <motion.div
+            className="bg-background border border-border rounded-lg p-6 max-w-lg w-full"
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <CheckCircle className="w-6 h-6 text-green-500" />
+              Batch Approve Confirmation
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              Are you sure you want to approve <strong>{selectedIds.size}</strong> reimbursement requests?
+            </p>
+            
+            <div className="max-h-60 overflow-y-auto mb-6 p-4 bg-muted/50 rounded-lg space-y-2">
+              {Array.from(selectedIds).map(id => {
+                const req = filteredRequests.find(r => r.id === id)
+                return (
+                  <div key={id} className="text-xs flex justify-between items-center border-b border-border/50 pb-1">
+                    <span>{id} - {req?.employeeName}</span>
+                    <span className="font-semibold">Rp {req?.amount.toLocaleString('id-ID')}</span>
+                  </div>
+                )
+              })}
+            </div>
+            
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowBatchApproveModal(false)} className="flex-1">
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleBatchApprove}
+                disabled={isBatchApproving}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {isBatchApproving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Approving...
+                  </>
+                ) : (
+                  'Yes, Approve All'
+                )}
+              </Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Approve Confirmation Modal */}
       {showApproveModal && pendingApprovalRequest && (
@@ -1017,23 +1217,23 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-muted-foreground">Request ID:</span>
-                  <p className="font-medium">{pendingApprovalRequest.id}</p>
+                  <p className="font-medium">{pendingApprovalRequest!.id}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Nama:</span>
-                  <p className="font-medium">{pendingApprovalRequest.employeeName}</p>
+                  <p className="font-medium">{pendingApprovalRequest!.employeeName}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">MSISDN/Email:</span>
-                  <p className="font-medium">{pendingApprovalRequest.employeeEmail}</p>
+                  <p className="font-medium">{pendingApprovalRequest!.employeeEmail}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Amount:</span>
-                  <p className="font-medium">Rp {pendingApprovalRequest.amount.toLocaleString('id-ID')}</p>
+                  <p className="font-medium">Rp {pendingApprovalRequest!.amount.toLocaleString('id-ID')}</p>
                 </div>
                 <div className="col-span-2">
                   <span className="text-muted-foreground">Deskripsi:</span>
-                  <p className="font-medium">{pendingApprovalRequest.description}</p>
+                  <p className="font-medium">{pendingApprovalRequest!.description}</p>
                 </div>
               </div>
             </div>
@@ -1043,7 +1243,7 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
               </Button>
               <Button
                 variant="default"
-                onClick={() => handleApprove(pendingApprovalRequest.id)}
+                onClick={() => handleApprove(pendingApprovalRequest!.id)}
                 className="flex-1"
               >
                 Ya, Approve
@@ -1078,23 +1278,23 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-muted-foreground">Request ID:</span>
-                  <p className="font-medium">{selectedRequest.id}</p>
+                  <p className="font-medium">{selectedRequest!.id}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Nama:</span>
-                  <p className="font-medium">{selectedRequest.employeeName}</p>
+                  <p className="font-medium">{selectedRequest!.employeeName}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">MSISDN/Email:</span>
-                  <p className="font-medium">{selectedRequest.employeeEmail}</p>
+                  <p className="font-medium">{selectedRequest!.employeeEmail}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Amount:</span>
-                  <p className="font-medium">Rp {selectedRequest.amount.toLocaleString('id-ID')}</p>
+                  <p className="font-medium">Rp {selectedRequest!.amount.toLocaleString('id-ID')}</p>
                 </div>
                 <div className="col-span-2">
                   <span className="text-muted-foreground">Deskripsi:</span>
-                  <p className="font-medium">{selectedRequest.description}</p>
+                  <p className="font-medium">{selectedRequest!.description}</p>
                 </div>
               </div>
             </div>
@@ -1112,7 +1312,7 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
               </Button>
               <Button
                 variant="destructive"
-                onClick={() => handleReject(selectedRequest.id)}
+                onClick={() => handleReject(selectedRequest!.id)}
                 disabled={!rejectReason.trim()}
                 className="flex-1"
               >

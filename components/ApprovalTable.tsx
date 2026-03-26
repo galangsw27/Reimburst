@@ -20,6 +20,8 @@ export interface ApprovalTableProps {
   onReject?: (request: Reimbursement) => void
   /** Callback when batch submit is clicked */
   onBatchSubmit?: (requests: Reimbursement[]) => void
+  /** Callback when batch approve is clicked */
+  onBatchApprove?: (requests: Reimbursement[]) => void
   /** Whether the table is in a loading state */
   loading?: boolean
 }
@@ -153,6 +155,7 @@ export function ApprovalTable({
   onApprove,
   onReject,
   onBatchSubmit,
+  onBatchApprove,
   loading = false 
 }: ApprovalTableProps) {
   const { user } = useAuth()
@@ -214,6 +217,15 @@ export function ApprovalTable({
     if (onBatchSubmit && selectedRequests.size > 0) {
       const selectedReqs = requests.filter(req => selectedRequests.has(req.id))
       onBatchSubmit(selectedReqs)
+      setSelectedRequests(new Set())
+    }
+  }
+
+  // Handle batch approve
+  const handleBatchApprove = () => {
+    if (onBatchApprove && selectedRequests.size > 0) {
+      const selectedReqs = requests.filter(req => selectedRequests.has(req.id))
+      onBatchApprove(selectedReqs)
       setSelectedRequests(new Set())
     }
   }
@@ -292,8 +304,8 @@ export function ApprovalTable({
             {user?.role === 'finance' && (
               <Button
                 size="sm"
-                onClick={handleBatchSubmit}
-                disabled={!onBatchSubmit}
+                onClick={handleBatchApprove}
+                className="bg-green-600 hover:bg-green-700"
               >
                 <Check className="w-4 h-4 mr-1" />
                 Batch Approve
@@ -526,7 +538,20 @@ export function ApprovalTable({
                             </div>
                             <div className="col-span-2">
                               <span className="text-muted-foreground block">Folder Evidence</span>
-                              <span className="font-medium max-w-[300px] truncate block" title={(request as any).folderEvidence || '-'}>{(request as any).folderEvidence || '-'}</span>
+                              <span className="font-medium max-w-[300px] truncate block" title={(request as any).folderEvidence || '-'}>
+                                {(request as any).folderEvidence ? (
+                                  ((request as any).folderEvidence.startsWith('http') || (request as any).folderEvidence.includes('drive.google.com')) ? (
+                                    <a href={(request as any).folderEvidence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                      <span className="inline-flex items-center justify-center w-4 h-4 bg-green-500 rounded-full text-[10px] font-bold text-black mr-1">1</span>
+                                      Buka Folder
+                                    </a>
+                                  ) : (
+                                    (request as any).folderEvidence
+                                  )
+                                ) : (
+                                  '-'
+                                )}
+                              </span>
                             </div>
                             <div className="col-span-2">
                               <span className="text-muted-foreground block">Approved By Lead</span>

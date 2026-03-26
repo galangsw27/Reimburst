@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS reimbursements (
     login_status VARCHAR(100),
     "by" VARCHAR(255),
     folder_evidence TEXT,
+    folder_evidence_2 TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

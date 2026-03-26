@@ -40,10 +40,16 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
   const [assetCheckResult, setAssetCheckResult] = useState<AssetMatchResult | null>(null)
   const [uploadedFiles, setUploadedFiles] = useState<FileDocument[]>([])
   const [currentFile, setCurrentFile] = useState<File | null>(null)
+  // Evidence Pendukung (Optional - evidence_2_)
+  const [evidence2File, setEvidence2File] = useState<File | null>(null)
+  const [evidence2PreviewUrl, setEvidence2PreviewUrl] = useState<string | null>(null)
+  const [evidence2UploadedFile, setEvidence2UploadedFile] = useState<FileDocument | null>(null)
+  const [isUploadingEvidence2, setIsUploadingEvidence2] = useState(false)
   const [availableProjects, setAvailableProjects] = useState<Project[]>([])
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const evidence2InputRef = useRef<HTMLInputElement>(null)
 
   // Load available projects from database
   React.useEffect(() => {
@@ -179,15 +185,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
       // Store uploaded file metadata
       setUploadedFiles([fileDocument])
 
-      // Process receipt with OCR webhook - send file directly
-      const ocrResponse = await reimbursementService.processReceipt(file)
-
-      if (!ocrResponse.success || !ocrResponse.data) {
-        throw new Error(ocrResponse.error || 'OCR processing failed')
-      }
-
-      const responseData = ocrResponse.data as any
-
       // Parse OCR response data
       const parseJsonData = (data: unknown): Record<string, unknown> => {
         if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -212,14 +209,30 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
         return {}
       }
 
-      let extracted: Record<string, unknown>
-      // Check if data is wrapped in a "data" field
-      if (responseData.data !== undefined) {
-        extracted = parseJsonData(responseData.data)
-      } else if (responseData.success && responseData.message) {
-        extracted = parseJsonData(responseData)
-      } else {
-        extracted = parseJsonData(responseData)
+      let extracted: Record<string, unknown> = {}
+
+      try {
+        // Process receipt with OCR webhook - send file directly
+        const ocrResponse = await reimbursementService.processReceipt(file)
+
+        if (!ocrResponse.success || !ocrResponse.data) {
+          throw new Error(ocrResponse.error || 'OCR processing failed')
+        }
+
+        const responseData = ocrResponse.data as any
+
+        // Check if data is wrapped in a "data" field
+        if (responseData.data !== undefined) {
+          extracted = parseJsonData(responseData.data)
+        } else if (responseData.success && responseData.message) {
+          extracted = parseJsonData(responseData)
+        } else {
+          extracted = parseJsonData(responseData)
+        }
+      } catch (ocrError) {
+        console.warn('OCR processing skipped or failed:', ocrError)
+        // Lanjutkan tanpa OCR
+        extracted = {}
       }
 
       // Helper functions for parsing
@@ -354,6 +367,61 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
     }
   }
 
+  // Handler for Evidence Pendukung (Optional)
+  const handleEvidence2Change = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingEvidence2(true)
+
+    try {
+      // Validate file
+      const validation = validateImageFile(file)
+      if (!validation.valid) {
+        setError(validation.error || 'File tidak valid')
+        setIsUploadingEvidence2(false)
+        return
+      }
+
+      // Generate requestId for evidence2
+      const requestId = `evidence2_${Date.now()}`
+
+      // Convert to base64 for preview
+      const base64Image = await convertToBase64(file)
+      setEvidence2PreviewUrl(base64Image)
+      setEvidence2File(file)
+
+      // Upload evidence2 to server (like evidence1)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('requestId', requestId)
+
+      const uploadResponse = await apiClient.post('/api/files', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+
+      const fileDocument = uploadResponse.data as FileDocument
+      setEvidence2UploadedFile(fileDocument)
+    } catch (err) {
+      console.error('Evidence2 upload error:', err)
+      setError('Gagal memproses Evidence Pendukung')
+    } finally {
+      setIsUploadingEvidence2(false)
+    }
+  }
+
+  // Remove evidence2 file
+  const handleRemoveEvidence2 = () => {
+    setEvidence2File(null)
+    setEvidence2PreviewUrl(null)
+    setEvidence2UploadedFile(null)
+    if (evidence2InputRef.current) {
+      evidence2InputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -455,6 +523,9 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
         loginStatus: data.loginStatus,
         by: data.by,
         folderEvidence: uploadedFiles.length > 0 ? uploadedFiles[0].filePath : null,
+        // Evidence Pendukung (Optional)
+        evidence2Image: evidence2UploadedFile?.filePath || evidence2PreviewUrl || null,
+        receiptImage2: evidence2PreviewUrl || null,
       }
 
       await addReimbursement(requestData as Reimbursement)
@@ -518,19 +589,21 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
         timestamp: new Date().toISOString()
       })
       
-      // Response structure: { data: { matched, assetId, assetName, ... } }
-      const responseData = response.data.data || response.data
+      // Response structure: { output: { matched, asset: { ... }, ... } }
+      const output = response.data.output || response.data.data || response.data
+      const asset = output.asset || output
       
       const matchResult: AssetMatchResult = {
-        matched: responseData.matched || false,
-        assetId: responseData.assetId || undefined,
-        assetName: responseData.assetName || undefined,
-        employeeName: responseData.employeeName || undefined,
-        department: responseData.department || undefined,
-        matchedBy: responseData.matchedBy || 'email',
-        matchedValue: responseData.matchedValue || data.msisdnEmail,
-        confidence: responseData.confidence || 0,
-        verifiedDate: responseData.verifiedDate || new Date().toISOString()
+        matched: output.matched || false,
+        assetId: asset.asset_id || output.assetId || undefined,
+        assetName: asset.asset_name || output.assetName || undefined,
+        assetDetail: asset.asset_detail || output.assetDetail || undefined,
+        employeeName: asset.employee_name || output.employeeName || undefined,
+        department: asset.department || output.department || undefined,
+        matchedBy: output.matchedField || output.matchedBy || 'email',
+        matchedValue: output.searchedFor || output.matchedValue || data.msisdnEmail,
+        confidence: output.confidence || 0,
+        verifiedDate: output.verifiedDate || new Date().toISOString()
       }
       
       setAssetCheckResult(matchResult)
@@ -548,6 +621,10 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
     setPreviewUrl(null)
     setCurrentFile(null)
     setUploadedFiles([])
+    // Clear Evidence Pendukung
+    setEvidence2File(null)
+    setEvidence2PreviewUrl(null)
+    setEvidence2UploadedFile(null)
     setData({
       nama: '',
       msisdnEmail: '',
@@ -709,6 +786,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
                             <span className="text-muted-foreground">Asset Name:</span>
                             <p className="font-medium">{assetCheckResult.assetName}</p>
                           </div>
+                          {assetCheckResult.assetDetail && (
+                            <div>
+                              <span className="text-muted-foreground">Asset Detail:</span>
+                              <p className="font-medium">{assetCheckResult.assetDetail}</p>
+                            </div>
+                          )}
                           <div>
                             <span className="text-muted-foreground">Employee:</span>
                             <p className="font-medium">{assetCheckResult.employeeName}</p>
@@ -803,14 +886,29 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
               ) : (
                 <p className="text-muted-foreground text-lg mb-8">Mendukung format JPG, PNG (Max 5MB)</p>
               )}
-              <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden" accept="image/*" />
-              <Button 
-                size="lg" 
-                className="shadow-lg shadow-primary/30"
-                disabled={!assetCheckResult?.matched}
+              <input 
+                ref={fileInputRef} 
+                type="file" 
+                onChange={handleFileChange} 
+                className="hidden" 
+                accept="image/*" 
+                id="file-upload-input"
+              />
+              
+              {/* Using label to trigger file input - more reliable */}
+              <label 
+                htmlFor="file-upload-input"
+                className={!assetCheckResult?.matched ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
               >
-                Pilih File Struk
-              </Button>
+                <Button 
+                  size="lg" 
+                  className="shadow-lg shadow-primary/30"
+                  disabled={!assetCheckResult?.matched}
+                  type="button"
+                >
+                  Pilih File Struk
+                </Button>
+              </label>
             </CardContent>
           </Card>
         </motion.div>
@@ -872,6 +970,88 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
                     ))}
                   </div>
                 )}
+
+                {/* Evidence Pendukung (Optional) */}
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-amber-400">Evidence Pendukung (Opsional)</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Upload bukti tambahan jika diperlukan (max 5MB)
+                      </p>
+                    </div>
+                    {evidence2File && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleRemoveEvidence2}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {!evidence2File ? (
+                    <div className="space-y-3">
+                      <input
+                        ref={evidence2InputRef}
+                        type="file"
+                        onChange={handleEvidence2Change}
+                        className="hidden"
+                        accept="image/*"
+                        id="evidence2-upload-input"
+                      />
+                      <div 
+                        className="cursor-pointer"
+                        onClick={() => document.getElementById('evidence2-upload-input')?.click()}
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full border-dashed border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+                          disabled={isUploadingEvidence2}
+                        >
+                          {isUploadingEvidence2 ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Memproses...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Klik untuk Upload Evidence Pendukung
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {evidence2PreviewUrl && (
+                        <div className="relative inline-block">
+                          <img
+                            src={evidence2PreviewUrl}
+                            alt="Evidence Pendukung Preview"
+                            className="w-32 h-32 object-cover rounded-lg border border-amber-500/30 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => {
+                              // Open in modal or new tab
+                              window.open(evidence2PreviewUrl, '_blank')
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="text-sm">
+                        <span className="text-amber-400 font-medium">{evidence2File.name}</span>
+                        <span className="text-muted-foreground ml-2">
+                          ({(evidence2File.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
                   <div className="flex items-center justify-between mb-4">
@@ -947,6 +1127,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
                               <span className="text-muted-foreground">Asset:</span>
                               <p className="font-medium">{assetCheckResult.assetName}</p>
                             </div>
+                            {assetCheckResult.assetDetail && (
+                              <div className="col-span-2">
+                                <span className="text-muted-foreground">Detail:</span>
+                                <p className="font-medium">{assetCheckResult.assetDetail}</p>
+                              </div>
+                            )}
                             <div>
                               <span className="text-muted-foreground">Employee:</span>
                               <p className="font-medium">{assetCheckResult.employeeName}</p>

@@ -7,7 +7,7 @@ import { Reimbursement, ReimbursementStatus } from '@/lib/types'
 import { useAuth } from '@/providers/AuthProvider'
 import { useReimbursements } from '@/lib/hooks/useReimbursements'
 import { Button } from '@/components/ui/button'
-import { Filter, X, AlertCircle, Search, CheckCircle, Send } from 'lucide-react'
+import { Filter, X, AlertCircle, Search, CheckCircle, Send, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +25,7 @@ export default function ApprovalsPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [pendingApprovalRequest, setPendingApprovalRequest] = useState<Reimbursement | null>(null)
   const [pendingSubmitRequests, setPendingSubmitRequests] = useState<Reimbursement[]>([])
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false)
   
   // Filters
   const [projectFilter, setProjectFilter] = useState<string>('all')
@@ -146,55 +147,83 @@ export default function ApprovalsPage() {
   }
 
   // Confirm batch submit - Lead submits to Head, Head submits to Finance
-  const confirmBatchSubmit = () => {
+  const confirmBatchSubmit = async () => {
     if (!user || pendingSubmitRequests.length === 0) return
     
-    pendingSubmitRequests.forEach(request => {
+    setIsBatchProcessing(true)
+    try {
+      const ids = pendingSubmitRequests.map(r => r.id)
+      const role = user.role
       const approvalDate = new Date().toISOString()
-      let newStatus: ReimbursementStatus = request.status
-      const newApprovals = { ...request.approvals }
       
-      if (user.role === 'lead' && request.status === 'approved_by_lead') {
-        // Lead submits to head
-        if (newApprovals.lead) {
-          newApprovals.lead = {
-            ...newApprovals.lead,
+      // Prepare batch data based on role
+      let batchData: any = {
+        status: '',
+        approvals: {}
+      }
+
+      if (role === 'lead') {
+        batchData.status = 'submitted_to_head'
+        batchData.approvals = {
+          lead: {
+            approved: true,
+            by: user.name,
+            date: approvalDate,
             submittedToHead: true,
             submittedDate: approvalDate
           }
         }
-        newStatus = 'submitted_to_head'
-      } else if (user.role === 'head' && request.status === 'approved_by_head') {
-        // Head submits to finance
-        if (newApprovals.head) {
-          newApprovals.head = {
-            ...newApprovals.head,
+      } else if (role === 'head') {
+        batchData.status = 'submitted_to_finance'
+        batchData.approvals = {
+          head: {
+            approved: true,
+            by: user.name,
+            date: approvalDate,
             submittedToFinance: true,
             submittedDate: approvalDate
           }
         }
-        newStatus = 'submitted_to_finance'
-      } else if (user.role === 'finance') {
-        // Finance batch approve
-        newApprovals.finance = {
-          approved: true,
-          by: user.name,
-          date: approvalDate,
-          comment: 'Batch approved'
+      } else if (role === 'finance') {
+        batchData.status = 'approved_by_finance'
+        batchData.approvals = {
+          finance: {
+            approved: true,
+            by: user.name,
+            date: approvalDate,
+            comment: 'Batch approved'
+          }
         }
-        newStatus = 'approved_by_finance'
       }
-      
-      if (newStatus !== request.status) {
-        updateReimbursement(request.id, {
-          status: newStatus,
-          approvals: newApprovals
+
+      const response = await fetch('/api/reimbursements/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'approve',
+          ids,
+          data: batchData
         })
+      })
+
+      if (response.ok) {
+        // Force refresh local state
+        window.location.reload()
+      } else {
+        const errorData = await response.json()
+        alert(`Batch operation failed: ${errorData.error}`)
       }
-    })
-    
-    setShowSubmitModal(false)
-    setPendingSubmitRequests([])
+    } catch (error) {
+      console.error('Batch operation error:', error)
+      alert('An unexpected error occurred')
+    } finally {
+      setIsBatchProcessing(false)
+      setShowSubmitModal(false)
+      setPendingSubmitRequests([])
+    }
   }
 
   // Handle reject
@@ -489,8 +518,14 @@ export default function ApprovalsPage() {
                     variant="default"
                     onClick={confirmBatchSubmit}
                     className="flex-1"
+                    disabled={isBatchProcessing}
                   >
-                    {user?.role === 'finance' ? (
+                    {isBatchProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : user?.role === 'finance' ? (
                       <>
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Ya, Approve

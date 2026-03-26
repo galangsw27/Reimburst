@@ -105,6 +105,7 @@ export interface UpdateReimbursementInput {
   approvals?: any; // JSONB field for detailed approval tracking
   asset?: string;
   receiptImage?: string;
+  folderEvidence?: string;
 }
 
 /**
@@ -512,6 +513,14 @@ export interface IReimbursementService {
    * @returns Promise resolving when attachment is complete
    */
   attachDocument(requestId: string, fileId: string): Promise<void>;
+
+  /**
+   * Batch approve multiple reimbursements
+   * @param ids - Array of reimbursement IDs to approve
+   * @param data - Approval data (status, approvals, etc.)
+   * @returns Promise resolving to array of updated reimbursements
+   */
+  batchApprove(ids: string[], data: UpdateReimbursementInput): Promise<Reimbursement[]>;
 }
 
 /**

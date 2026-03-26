@@ -46,7 +46,7 @@ DB_PASSWORD=${DB_PASSWORD:-postgres}
 if [ -n "$DATABASE_URL" ]; then
     print_status "Using DATABASE_URL for connection"
     CONNECTION_STRING="$DATABASE_URL"
-elif command -v docker &> /dev/null && docker ps | grep -q "reimbursement-db"; then
+elif command -v docker &> /dev/null && docker ps | grep -q "reimbursement_db"; then
     print_status "Detected Docker environment, using docker exec"
     DOCKER_MODE=true
 else
@@ -60,7 +60,7 @@ print_status "Timestamp: $(date)"
 # Create backup before migration
 print_status "Creating database backup..."
 if [ "$DOCKER_MODE" = true ]; then
-    docker exec reimbursement-db pg_dump -U postgres reimbursement_db > "backup_before_enhancement_$(date +%Y%m%d_%H%M%S).sql"
+    docker exec reimbursement_db pg_dump -U postgres reimbursement_db > "backup_before_enhancement_$(date +%Y%m%d_%H%M%S).sql"
 else
     if [ -n "$CONNECTION_STRING" ]; then
         pg_dump "$CONNECTION_STRING" > "backup_before_enhancement_$(date +%Y%m%d_%H%M%S).sql"
@@ -75,7 +75,7 @@ print_status "Running enhancement flow migration..."
 
 if [ "$DOCKER_MODE" = true ]; then
     # Use docker exec for containerized database
-    if docker exec -i reimbursement-db psql -U postgres -d reimbursement_db < scripts/enhancement-flow-migration.sql; then
+    if docker exec -i reimbursement_db psql -U postgres -d reimbursement_db < scripts/enhancement-flow-migration.sql; then
         print_success "Migration executed successfully via Docker"
     else
         print_error "Migration failed via Docker"
@@ -111,7 +111,7 @@ run_verification() {
     print_status "Checking: $description"
     
     if [ "$DOCKER_MODE" = true ]; then
-        docker exec reimbursement-db psql -U postgres -d reimbursement_db -c "$query"
+        docker exec reimbursement_db psql -U postgres -d reimbursement_db -c "$query"
     else
         if [ -n "$CONNECTION_STRING" ]; then
             psql "$CONNECTION_STRING" -c "$query"

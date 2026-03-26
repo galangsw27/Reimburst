@@ -129,9 +129,10 @@ export interface AssetMatchResult {
   matched: boolean
   assetId?: string
   assetName?: string
+  assetDetail?: string
   employeeName?: string
   department?: string
-  matchedBy: 'msisdn' | 'email'
+  matchedBy: string
   matchedValue: string
   confidence?: number
   verifiedDate: string
