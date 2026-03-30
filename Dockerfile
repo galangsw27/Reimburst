@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -53,7 +53,8 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy necessary files
-COPY --from=builder /app/public ./public
+# Note: public folder may not exist in standalone mode, so we conditionally copy
+RUN mkdir -p public && cp -r public/. /app/public/ 2>/dev/null || true
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

@@ -11,6 +11,7 @@
  */
 
 import axios from 'axios'
+import { apiClient } from '@/lib/api/client'
 import { Reimbursement, ReimbursementStatus, OCRResponse, AssetMatchResponse, AssetMatchResult } from '@/lib/types'
 
 /**
@@ -41,25 +42,11 @@ async function getRuntimeConfig() {
  */
 export async function processReceipt(file: File): Promise<OCRResponse> {
   try {
-    // Try to get webhook URL from build-time env first
-    let webhookUrl = process.env.NEXT_PUBLIC_WEBHOOK_URL
-    
-    // If not available at build time, try runtime config
-    if (!webhookUrl) {
-      const config = await getRuntimeConfig()
-      webhookUrl = config?.webhookUrl
-    }
-    
-    if (!webhookUrl) {
-      console.error('NEXT_PUBLIC_WEBHOOK_URL is not configured. Please set it in Railway dashboard.')
-      throw new Error('Webhook URL tidak dikonfigurasi. Hubungi administrator untuk mengatur NEXT_PUBLIC_WEBHOOK_URL di Railway.')
-    }
-    
-    // Create FormData to send file directly
+    // Use server-side API route to call webhook (URL kept secure server-side)
     const formData = new FormData()
     formData.append('file', file)
     
-    const response = await axios.post(webhookUrl, formData, {
+    const response = await apiClient.post('/api/ocr/process', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -93,21 +80,8 @@ export async function processReceipt(file: File): Promise<OCRResponse> {
  */
 export async function matchAsset(description: string): Promise<AssetMatchResponse> {
   try {
-    // Try to get webhook URL from build-time env first
-    let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
-    
-    // If not available at build time, try runtime config
-    if (!webhookUrl) {
-      const config = await getRuntimeConfig()
-      webhookUrl = config?.assetMatchWebhookUrl
-    }
-    
-    if (!webhookUrl) {
-      console.error('NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL is not configured. Please set it in Railway dashboard.')
-      throw new Error('Asset Match Webhook URL tidak dikonfigurasi. Hubungi administrator untuk mengatur NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL di Railway.')
-    }
-    
-    const response = await axios.post(webhookUrl, {
+    // Use server-side API route to call webhook (URL kept secure server-side)
+    const response = await apiClient.post('/api/asset/match', {
       description,
     })
     

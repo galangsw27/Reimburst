@@ -567,25 +567,9 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
     setError(null)
     
     try {
-      // Try to get webhook URL from build-time env first
-      let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
-      
-      // If not available at build time, try runtime config
-      if (!webhookUrl) {
-        try {
-          const configResponse = await apiClient.get('/api/config')
-          webhookUrl = configResponse.data.assetMatchWebhookUrl
-        } catch (configError) {
-          console.error('Failed to load runtime config:', configError)
-        }
-      }
-      
-      if (!webhookUrl) {
-        throw new Error('Asset matching webhook URL tidak dikonfigurasi. Hubungi administrator.')
-      }
-      
-      const response = await apiClient.post(webhookUrl, {
-        msisdn_email: data.msisdnEmail,
+      // Use server-side API route for asset matching (URL kept secure server-side)
+      const response = await apiClient.post('/api/asset/match', {
+        description: data.msisdnEmail,
         timestamp: new Date().toISOString()
       })
       

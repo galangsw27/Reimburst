@@ -130,11 +130,8 @@ export async function POST(request: NextRequest) {
     
     const reimbursement = await reimbursementService.createReimbursement(data);
 
-    // Save evidence to Google Drive via n8n webhook
+    // Save evidence to Google Drive via n8n webhook (server-side only, no logging for security)
     const gdriveWebhookUrl = process.env.N8N_GDRIVE_WEBHOOK_URL;
-    console.log('[GDrive] Webhook URL:', gdriveWebhookUrl);
-    console.log('[GDrive] folderEvidence:', data.folderEvidence);
-    console.log('[GDrive] evidence2Image:', data.evidence2Image);
     
     if (gdriveWebhookUrl && (data.folderEvidence || data.evidence2Image)) {
       try {
@@ -151,8 +148,6 @@ export async function POST(request: NextRequest) {
             const ext = filePath.match(/data:image\/(\w+);base64/)?.[1] || 'jpg';
             const fileName = `${label}_${Date.now()}.${ext}`;
             
-            console.log(`[GDrive] Sending ${label} to webhook...`, { reimbursementId: reimbursement.id, projectName: data.project, fileName });
-            
             try {
               const response = await axios.post(gdriveWebhookUrl, {
                 reimbursementId: reimbursement.id,
@@ -160,8 +155,6 @@ export async function POST(request: NextRequest) {
                 fileName: fileName,
                 base64: base64Data
               }, { timeout: 30000 });
-              
-              console.log(`[GDrive] Response for ${label}:`, response.data);
               
               if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
                 return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
@@ -174,14 +167,11 @@ export async function POST(request: NextRequest) {
           
           // It's a local file path - read and convert to base64
           const fullPath = path.join(uploadDir, path.basename(filePath));
-          console.log(`[GDrive] Checking local file:`, fullPath, 'exists:', fs.existsSync(fullPath));
           if (fs.existsSync(fullPath)) {
             const fileBuffer = fs.readFileSync(fullPath);
             const base64Data = fileBuffer.toString('base64');
             const ext = path.extname(filePath).slice(1) || 'jpg';
             const fileName = `${label}_${path.basename(filePath)}`;
-            
-            console.log(`[GDrive] Sending ${label} (local file) to webhook...`, { reimbursementId: reimbursement.id, projectName: data.project, fileName });
             
             try {
               const response = await axios.post(gdriveWebhookUrl, {
@@ -190,8 +180,6 @@ export async function POST(request: NextRequest) {
                 fileName: fileName,
                 base64: base64Data
               }, { timeout: 30000 });
-              
-              console.log(`[GDrive] Response for ${label}:`, response.data);
               
               if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
                 return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
@@ -205,11 +193,9 @@ export async function POST(request: NextRequest) {
 
         // Save evidence 1 (main evidence) to GDrive
         const gdriveUrl1 = await saveToGdrive(data.folderEvidence, 'evidence1');
-        console.log('[GDrive] gdriveUrl1:', gdriveUrl1);
         
         // Save evidence 2 (pendukung) to GDrive
         const gdriveUrl2 = await saveToGdrive(data.evidence2Image, 'evidence2');
-        console.log('[GDrive] gdriveUrl2:', gdriveUrl2);
 
         // Update reimbursement with GDrive URLs if successful
         if (gdriveUrl1 || gdriveUrl2) {
@@ -218,8 +204,6 @@ export async function POST(request: NextRequest) {
           if (gdriveUrl2) {
             updateData.evidence2Image = gdriveUrl2;
           }
-          
-          console.log('[GDrive] Updating reimbursement with:', updateData);
           
           await reimbursementService.updateReimbursement(reimbursement.id, updateData);
           

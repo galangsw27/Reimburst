@@ -500,25 +500,9 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
         throw new Error('Invalid email or phone number format')
       }
       
-      // Try to get webhook URL from build-time env first
-      let webhookUrl = process.env.NEXT_PUBLIC_ASSET_MATCH_WEBHOOK_URL
-      
-      // If not available at build time, try runtime config
-      if (!webhookUrl) {
-        try {
-          const configResponse = await apiClient.get('/api/config')
-          webhookUrl = configResponse.data.assetMatchWebhookUrl
-        } catch (configError) {
-          console.error('Failed to load runtime config:', configError)
-        }
-      }
-      
-      if (!webhookUrl) {
-        throw new Error('Asset matching webhook URL tidak dikonfigurasi. Hubungi administrator.')
-      }
-      
-      const response = await apiClient.post(webhookUrl, {
-        msisdn_email: request.employeeEmail,
+      // Use server-side API route for asset matching (URL kept secure server-side)
+      const response = await apiClient.post('/api/asset/match', {
+        description: request.employeeEmail,
         timestamp: new Date().toISOString(),
         requestId: request.id // Include request ID for tracking
       })

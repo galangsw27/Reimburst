@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(50) NOT NULL CHECK (role IN ('head', 'finance', 'lead', 'user')),
+  role VARCHAR(50) NOT NULL CHECK (role IN ('head', 'finance', 'lead', 'user', 'tester')),
+  status VARCHAR(50) DEFAULT 'ACTIVE',
   lead_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
