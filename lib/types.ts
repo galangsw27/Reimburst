@@ -62,10 +62,22 @@ export interface Reimbursement {
   project: ProjectType
   status: ReimbursementStatus
   receiptImage?: string
+  receiptImage2?: string
   imageUrl?: string
   asset?: string
   paymentMethod?: string // Payment method (e.g., Cash, Transfer, etc.)
   transactionTime?: string
+  transactionId?: string
+  transactionAmount?: number
+  adminFee?: number
+  shippingFee?: number
+  serviceFee?: number
+  discount?: number
+  loginStatus?: string
+  by?: string
+  folderEvidence?: string
+  folderEvidence2?: string
+  projectCode?: string
   createdAt: string
   updatedAt: string
   approvedBy?: {

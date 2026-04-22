@@ -25,6 +25,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
   const { addReimbursement } = useReimbursements()
   
   const [state, setState] = useState<AppState>('upload')
+  const [userType, setUserType] = useState<'tester' | 'other'>('tester')
   const [data, setData] = useState<ReimbursementData>({
     nama: '',
     msisdnEmail: '',
@@ -463,8 +464,9 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
     
     // Validate selected project is still active
     const selectedProject = availableProjects.find(p => p.name === data.project)
-    if (!selectedProject) {
-      errors.push('Project yang dipilih tidak valid atau tidak aktif')
+    // For Tester type, require asset match
+    if (userType === 'tester' && !assetCheckResult?.matched) {
+      errors.push('Asset harus di-match terlebih dahulu untuk tipe Tester')
     }
     
     if (errors.length > 0) {
@@ -478,7 +480,8 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
     try {
       // Use the result from the manual "Check Asset" button click if available
       // This ensures we don't call the n8n webhook again during submission
-      const assetMatchResult = assetCheckResult
+      // For "Other" type, assetMatchResult will be null
+      const assetMatchResult = userType === 'tester' ? assetCheckResult : null
 
       // Mark uploaded files as used to prevent duplication
       for (const fileDoc of uploadedFiles) {
@@ -620,6 +623,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
     setError(null)
     setValidationErrors([])
     setAssetCheckResult(null)
+    setUserType('tester')
   }
 
   if (!user) {
@@ -684,28 +688,64 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
                 </div>
               </div>
 
+              {/* User Type Selection */}
+              <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <h3 className="text-sm font-semibold mb-3 text-purple-400">Tipe Pengaju</h3>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="userType"
+                      value="tester"
+                      checked={userType === 'tester'}
+                      onChange={() => setUserType('tester')}
+                      className="w-4 h-4 text-purple-500"
+                    />
+                    <span className="text-sm">Tester</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="userType"
+                      value="other"
+                      checked={userType === 'other'}
+                      onChange={() => setUserType('other')}
+                      className="w-4 h-4 text-purple-500"
+                    />
+                    <span className="text-sm">Other</span>
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {userType === 'tester'
+                    ? 'Tester: Gunakan form dengan asset matching'
+                    : 'Other: Langsung upload tanpa asset matching'}
+                </p>
+              </div>
+
               <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-semibold text-primary">Informasi Pengaju</h3>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleCheckAsset}
-                    disabled={isCheckingAsset || !data.msisdnEmail}
-                  >
-                    {isCheckingAsset ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Checking...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="w-4 h-4 mr-2" />
-                        Check Asset
-                      </>
-                    )}
-                  </Button>
+                  {userType === 'tester' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleCheckAsset}
+                      disabled={isCheckingAsset || !data.msisdnEmail}
+                    >
+                      {isCheckingAsset ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Checking...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="w-4 h-4 mr-2" />
+                          Check Asset
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -735,12 +775,14 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
                       className="bg-background"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Akan digunakan untuk matching dengan database asset
+                      {userType === 'tester'
+                        ? 'Akan digunakan untuk matching dengan database asset'
+                        : 'Masukkan MSISDN atau Email pengaju'}
                     </p>
                   </div>
                 </div>
                 
-                {assetCheckResult && (
+                {userType === 'tester' && assetCheckResult && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -849,23 +891,35 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
             </CardContent>
           </Card>
 
-          <Card 
-            className={`transition-all ${!assetCheckResult?.matched ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer hover:border-primary/50'}`} 
+          <Card
+            className={`transition-all ${
+              (userType === 'tester' && !assetCheckResult?.matched)
+                ? 'opacity-50 cursor-not-allowed grayscale'
+                : 'cursor-pointer hover:border-primary/50'
+            }`}
             onClick={() => {
-              if (assetCheckResult?.matched) {
+              if (userType === 'other' || assetCheckResult?.matched) {
                 fileInputRef.current?.click()
               }
             }}
           >
             <CardContent className="py-16 flex flex-col items-center text-center">
               <motion.div
-                className={`mb-8 p-6 rounded-3xl border ${!assetCheckResult?.matched ? 'bg-muted border-muted-foreground/20' : 'bg-primary/10 border-primary/20'}`}
-                whileHover={assetCheckResult?.matched ? { scale: 1.1, rotate: 5 } : {}}
+                className={`mb-8 p-6 rounded-3xl border ${
+                  (userType === 'tester' && !assetCheckResult?.matched)
+                    ? 'bg-muted border-muted-foreground/20'
+                    : 'bg-primary/10 border-primary/20'
+                }`}
+                whileHover={(userType === 'other' || assetCheckResult?.matched) ? { scale: 1.1, rotate: 5 } : {}}
               >
-                <Upload className={`w-16 h-16 ${!assetCheckResult?.matched ? 'text-muted-foreground' : 'text-primary'}`} />
+                <Upload className={`w-16 h-16 ${
+                  (userType === 'tester' && !assetCheckResult?.matched)
+                    ? 'text-muted-foreground'
+                    : 'text-primary'
+                }`} />
               </motion.div>
               <h2 className="text-3xl font-bold mb-3 text-white">Klik untuk Upload Struk</h2>
-              {!assetCheckResult?.matched ? (
+              {userType === 'tester' && !assetCheckResult?.matched ? (
                 <p className="text-yellow-500 font-medium mb-8">⚠️ Silakan lakukan "Check Asset" terlebih dahulu</p>
               ) : (
                 <p className="text-muted-foreground text-lg mb-8">Mendukung format JPG, PNG (Max 5MB)</p>
@@ -880,14 +934,14 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
               />
               
               {/* Using label to trigger file input - more reliable */}
-              <label 
+              <label
                 htmlFor="file-upload-input"
-                className={!assetCheckResult?.matched ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                className={(userType === 'tester' && !assetCheckResult?.matched) ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
               >
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   className="shadow-lg shadow-primary/30"
-                  disabled={!assetCheckResult?.matched}
+                  disabled={userType === 'tester' && !assetCheckResult?.matched}
                   type="button"
                 >
                   Pilih File Struk

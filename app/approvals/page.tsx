@@ -5,7 +5,7 @@ import { ApprovalTable } from '@/components/ApprovalTable'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { Reimbursement, ReimbursementStatus } from '@/lib/types'
 import { useAuth } from '@/providers/AuthProvider'
-import { useReimbursements } from '@/lib/hooks/useReimbursements'
+import { useReimbursements, invalidateReimbursementsCache } from '@/lib/hooks/useReimbursements'
 import { Button } from '@/components/ui/button'
 import { Filter, X, AlertCircle, Search, CheckCircle, Send, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -146,6 +146,13 @@ export default function ApprovalsPage() {
     setShowSubmitModal(true)
   }
 
+  // Handle single submit - Show confirmation modal for single request
+  const handleSubmitSingle = (request: Reimbursement) => {
+    if (!user) return
+    setPendingSubmitRequests([request])
+    setShowSubmitModal(true)
+  }
+
   // Confirm batch submit - Lead submits to Head, Head submits to Finance
   const confirmBatchSubmit = async () => {
     if (!user || pendingSubmitRequests.length === 0) return
@@ -210,7 +217,8 @@ export default function ApprovalsPage() {
       })
 
       if (response.ok) {
-        // Force refresh local state
+        // Invalidate cache and force refresh
+        invalidateReimbursementsCache()
         window.location.reload()
       } else {
         const errorData = await response.json()
@@ -368,6 +376,7 @@ export default function ApprovalsPage() {
             onApprove={handleApprove}
             onReject={handleReject}
             onBatchSubmit={handleBatchSubmit}
+            onSubmitSingle={handleSubmitSingle}
             loading={!mounted}
           />
 

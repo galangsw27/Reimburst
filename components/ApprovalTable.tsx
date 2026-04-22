@@ -20,6 +20,8 @@ export interface ApprovalTableProps {
   onReject?: (request: Reimbursement) => void
   /** Callback when batch submit is clicked */
   onBatchSubmit?: (requests: Reimbursement[]) => void
+  /** Callback when single submit is clicked (for lead/head) */
+  onSubmitSingle?: (request: Reimbursement) => void
   /** Callback when batch approve is clicked */
   onBatchApprove?: (requests: Reimbursement[]) => void
   /** Whether the table is in a loading state */
@@ -155,6 +157,7 @@ export function ApprovalTable({
   onApprove,
   onReject,
   onBatchSubmit,
+  onSubmitSingle,
   onBatchApprove,
   loading = false 
 }: ApprovalTableProps) {
@@ -218,6 +221,16 @@ export function ApprovalTable({
       const selectedReqs = requests.filter(req => selectedRequests.has(req.id))
       onBatchSubmit(selectedReqs)
       setSelectedRequests(new Set())
+    }
+  }
+
+  // Handle single submit (for lead/head to submit to next level)
+  const handleSubmitSingle = (request: Reimbursement) => {
+    if (onSubmitSingle) {
+      onSubmitSingle(request)
+    } else if (onBatchSubmit) {
+      // Fallback to batch submit if onSubmitSingle not provided
+      onBatchSubmit([request])
     }
   }
 
@@ -460,7 +473,7 @@ export function ApprovalTable({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => onBatchSubmit?.([request])}
+                                  onClick={() => handleSubmitSingle(request)}
                                   className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100"
                                   title={`Submit to ${getNextLevelLabel(user!.role)}`}
                                 >
