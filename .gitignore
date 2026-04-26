@@ -67,3 +67,9 @@ supabase*
 
 *.png
 *.webp
+.mcp.json
+reimburst_data.sql
+skills-lock.json
+vercel.env
+.claude/settings.local.json
+.claude/settings.local.json

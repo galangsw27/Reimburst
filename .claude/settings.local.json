@@ -4,5 +4,9 @@
       "Bash(npm install *)",
       "Bash(npm audit *)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
+  "enableAllProjectMcpServers": true
 }

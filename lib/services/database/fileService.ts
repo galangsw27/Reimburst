@@ -18,8 +18,8 @@
 import { FileDocument } from '@/lib/types';
 import { IFileService, UploadFileInput, CreateFileDocumentInput, FileDocumentFilters } from '../types';
 import { db } from '@/lib/database/connection';
-import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
 import { getDatabaseConfig } from '@/lib/config/database';
 
 /**
@@ -90,45 +90,57 @@ export class DatabaseFileService implements IFileService {
       throw new Error(`File with name "${systemFileName}" is already used in another request`);
     }
     
-    // Save file to disk
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    const filePath = path.join(uploadDir, systemFileName);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(filePath, fileBuffer);
-    
+    const gdriveWebhookUrl = process.env.N8N_GDRIVE_WEBHOOK_URL;
+    let filePath = `/uploads/${systemFileName}`;
+
+    if (gdriveWebhookUrl) {
+      try {
+        const response = await axios.post(gdriveWebhookUrl, {
+          requestId,
+          fileName: systemFileName,
+          base64: fileBuffer.toString('base64')
+        }, { timeout: 30000 });
+
+        filePath = response.data?.evidenceFolder
+          || response.data?.folderUrl
+          || response.data?.webViewLink
+          || response.data?.url
+          || filePath;
+      } catch (error) {
+        console.error('GDrive upload failed, using metadata-only fallback:', error);
+      }
+    }
+
     const query = `
       INSERT INTO documents (
-        request_id, 
-        original_filename, 
-        system_filename, 
-        file_path, 
-        file_size, 
-        mime_type, 
-        is_used, 
+        request_id,
+        original_filename,
+        system_filename,
+        file_path,
+        file_size,
+        mime_type,
+        is_used,
         uploaded_at
       )
       VALUES ($1, $2, $3, $4, $5, $6, FALSE, NOW())
-      RETURNING 
-        id::text, 
-        request_id as "requestId", 
-        original_filename as "originalFileName", 
-        system_filename as "systemFileName", 
-        file_path as "filePath", 
-        file_size as "fileSize", 
-        mime_type as "mimeType", 
-        is_used as "isUsed", 
+      RETURNING
+        id::text,
+        request_id as "requestId",
+        original_filename as "originalFileName",
+        system_filename as "systemFileName",
+        file_path as "filePath",
+        file_size as "fileSize",
+        mime_type as "mimeType",
+        is_used as "isUsed",
         uploaded_at as "uploadedAt"
     `;
-    
+
     const result = await db.query(query, [
       requestId,
       file.name,
       systemFileName,
-      `/uploads/${systemFileName}`, // Path in storage system
+      filePath,
       file.size,
       file.type || 'application/octet-stream'
     ]);
