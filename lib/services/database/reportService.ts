@@ -99,7 +99,7 @@ export class DatabaseReportService implements IReportService {
         r.amount,
         r.description,
         r.status,
-        COALESCE(r.date, r.submission_date::text) as date,
+        COALESCE(r.date, r.submission_date::date) as date,
         COALESCE(r.project, 'MaxStream') as project,
         r.receipt_image as "receiptImage",
         r.receipt_image_2 as "receiptImage2",
