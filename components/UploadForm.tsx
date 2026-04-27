@@ -500,7 +500,6 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
         description: data.transaksi || `${data.transaksi} - ${data.paymentType}`,
         project: data.project,
         status: 'pending' as const,
-        receiptImage: previewUrl || undefined,
         asset: assetMatchResult?.assetName,
         paymentMethod: data.paymentType, // Store payment method
         createdAt: new Date().toISOString(),
@@ -525,10 +524,12 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
         discount: data.diskon,
         loginStatus: data.loginStatus,
         by: data.by,
-        folderEvidence: uploadedFiles.length > 0 ? uploadedFiles[0].filePath : null,
+        receiptImage: uploadedFiles.length > 0 ? uploadedFiles[0].filePath : null,
+        folderEvidence: uploadedFiles.length > 0 ? (uploadedFiles[0] as any).gdriveUrl || null : null,
         // Evidence Pendukung (Optional)
-        evidence2Image: evidence2UploadedFile?.filePath || evidence2PreviewUrl || null,
-        receiptImage2: evidence2PreviewUrl || null,
+        receiptImage2: evidence2UploadedFile?.filePath || null,
+        evidence2Image: evidence2UploadedFile?.filePath || null,
+        folderEvidence2: (evidence2UploadedFile as any)?.gdriveUrl || null,
       }
 
       await addReimbursement(requestData as Reimbursement)

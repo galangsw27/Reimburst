@@ -495,23 +495,33 @@ export function RequestTable({
                                 <div className="flex gap-2">
                                   <div onClick={() => setPreviewImage(request.receiptImage as string)} className="inline-block relative" title="Klik untuk memperbesar">
                                     <span className="absolute -top-1 -left-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">1</span>
-                                    <img 
-                                      src={request.receiptImage} 
-                                      alt="Evidence" 
+                                    <img
+                                      src={request.receiptImage}
+                                      alt="Evidence"
                                       className="max-h-24 object-cover border rounded cursor-pointer hover:opacity-80 transition-opacity"
                                     />
                                   </div>
-                                  {(request as any).receiptImage2 && (
-                                    <div onClick={() => setPreviewImage((request as any).receiptImage2)} className="inline-block relative" title="Evidence Pendukung - Klik untuk memperbesar">
+                                  {request.receiptImage2 && (
+                                    <div onClick={() => setPreviewImage(request.receiptImage2 as string)} className="inline-block relative" title="Evidence Pendukung - Klik untuk memperbesar">
                                       <span className="absolute -top-1 -left-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">2</span>
-                                      <img 
-                                        src={(request as any).receiptImage2} 
-                                        alt="Evidence 2" 
+                                      <img
+                                        src={request.receiptImage2}
+                                        alt="Evidence 2"
                                         className="max-h-24 object-cover border border-amber-500 rounded cursor-pointer hover:opacity-80 transition-opacity"
                                       />
                                     </div>
                                   )}
                                 </div>
+                              ) : (
+                                <span className="font-medium block">-</span>
+                              )}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground block mb-1">Folder GDrive</span>
+                              {(request as any).folderEvidence ? (
+                                <a href={(request as any).folderEvidence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                  Buka GDrive
+                                </a>
                               ) : (
                                 <span className="font-medium block">-</span>
                               )}

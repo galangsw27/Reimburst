@@ -947,6 +947,16 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                       onClick={() => window.open(request.receiptImage, '_blank')}
                     />
                   )}
+                  {(request as any).folderEvidence && (
+                    <a
+                      href={(request as any).folderEvidence}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:underline block mb-4 text-sm"
+                    >
+                      Buka Folder GDrive
+                    </a>
+                  )}
 
                   <div className="flex gap-2">
                     <Button

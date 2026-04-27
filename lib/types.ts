@@ -203,7 +203,8 @@ export interface FileDocument {
   requestId: string
   originalFileName: string
   systemFileName: string // Format: [sequence]_transaction_id.ext
-  filePath: string // Path in storage system
+  filePath: string // Supabase Storage public URL for image display
+  gdriveUrl?: string // GDrive archive URL (optional)
   fileSize: number
   mimeType: string
   isUsed: boolean // Flag for anti-duplication

@@ -369,8 +369,8 @@ export class DatabaseReimbursementService implements IReimbursementService {
       (data.project as any) || 'MaxStream',
       data.projectId ? parseInt(data.projectId) : null,
       data.assetId ? parseInt(data.assetId) : null,
-      data.receiptImage || null,
-      (data as any).receiptImage2 || null,
+      (data as any).folderEvidence || null,
+      (data as any).folderEvidence2 || (data as any).evidence2Image || null,
       user.lead_id || null,
       leadName,
       submissionDate,
@@ -386,7 +386,7 @@ export class DatabaseReimbursementService implements IReimbursementService {
       (data as any).loginStatus || null,
       (data as any).by || null,
       (data as any).folderEvidence || null,
-      (data as any).evidence2Image || null,
+      (data as any).folderEvidence2 || (data as any).evidence2Image || null,
     ]);
 
     const row = result.rows[0];

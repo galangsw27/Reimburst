@@ -21,6 +21,7 @@ import { db } from '@/lib/database/connection';
 import path from 'path';
 import axios from 'axios';
 import { getDatabaseConfig } from '@/lib/config/database';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 /**
  * DatabaseFileService implements IFileService using PostgreSQL database.
@@ -92,7 +93,7 @@ export class DatabaseFileService implements IFileService {
     
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     const gdriveWebhookUrl = process.env.N8N_GDRIVE_WEBHOOK_URL;
-    let filePath = `/uploads/${systemFileName}`;
+    let gdriveUrl = '';
 
     if (gdriveWebhookUrl) {
       try {
@@ -102,15 +103,42 @@ export class DatabaseFileService implements IFileService {
           base64: fileBuffer.toString('base64')
         }, { timeout: 30000 });
 
-        filePath = response.data?.evidenceFolder
+        gdriveUrl = response.data?.evidenceFolder
           || response.data?.folderUrl
           || response.data?.webViewLink
           || response.data?.url
-          || filePath;
+          || '';
       } catch (error) {
         console.error('GDrive upload failed, using metadata-only fallback:', error);
       }
     }
+
+    // Upload to Supabase Storage for direct image serving
+    let supabaseUrl = '';
+    try {
+      const storagePath = `receipts/${requestId}/${systemFileName}`;
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+        .from('reimbursement-images')
+        .upload(storagePath, fileBuffer, {
+          contentType: file.type || 'application/octet-stream',
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error('Supabase upload error:', uploadError);
+      } else if (uploadData) {
+        const { data: urlData } = supabaseAdmin.storage
+          .from('reimbursement-images')
+          .getPublicUrl(uploadData.path);
+        supabaseUrl = urlData.publicUrl;
+      }
+    } catch (storageError) {
+      console.error('Supabase Storage upload failed:', storageError);
+    }
+
+    // filePath in documents table stores Supabase image URL for rendering
+    const filePath = supabaseUrl || `/uploads/${systemFileName}`;
 
     const query = `
       INSERT INTO documents (
@@ -118,18 +146,20 @@ export class DatabaseFileService implements IFileService {
         original_filename,
         system_filename,
         file_path,
+        gdrive_url,
         file_size,
         mime_type,
         is_used,
         uploaded_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, FALSE, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NOW())
       RETURNING
         id::text,
         request_id as "requestId",
         original_filename as "originalFileName",
         system_filename as "systemFileName",
         file_path as "filePath",
+        gdrive_url as "gdriveUrl",
         file_size as "fileSize",
         mime_type as "mimeType",
         is_used as "isUsed",
@@ -141,10 +171,11 @@ export class DatabaseFileService implements IFileService {
       file.name,
       systemFileName,
       filePath,
+      gdriveUrl,
       file.size,
       file.type || 'application/octet-stream'
     ]);
-    
+
     return result.rows[0];
   }
 
@@ -249,8 +280,9 @@ export class DatabaseFileService implements IFileService {
         request_id as "requestId", 
         original_filename as "originalFileName", 
         system_filename as "systemFileName", 
-        file_path as "filePath", 
-        file_size as "fileSize", 
+        file_path as "filePath",
+        gdrive_url as "gdriveUrl",
+        file_size as "fileSize",
         mime_type as "mimeType", 
         is_used as "isUsed", 
         uploaded_at as "uploadedAt"
@@ -279,8 +311,9 @@ export class DatabaseFileService implements IFileService {
         request_id as "requestId", 
         original_filename as "originalFileName", 
         system_filename as "systemFileName", 
-        file_path as "filePath", 
-        file_size as "fileSize", 
+        file_path as "filePath",
+        gdrive_url as "gdriveUrl",
+        file_size as "fileSize",
         mime_type as "mimeType", 
         is_used as "isUsed", 
         uploaded_at as "uploadedAt"
@@ -364,8 +397,9 @@ export class DatabaseFileService implements IFileService {
         request_id as "requestId", 
         original_filename as "originalFileName", 
         system_filename as "systemFileName", 
-        file_path as "filePath", 
-        file_size as "fileSize", 
+        file_path as "filePath",
+        gdrive_url as "gdriveUrl",
+        file_size as "fileSize",
         mime_type as "mimeType", 
         is_used as "isUsed", 
         uploaded_at as "uploadedAt"

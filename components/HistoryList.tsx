@@ -695,13 +695,25 @@ export const HistoryList: React.FC<HistoryListProps> = () => {
                           )}
                           {request.receiptImage && (
                             <div>
-                              <span className="text-muted-foreground">Receipt Image:</span>
+                              <span className="text-muted-foreground">Evidence:</span>
                               <img
                                 src={request.receiptImage}
                                 alt="Receipt"
                                 className="mt-2 w-48 h-48 object-cover rounded-lg cursor-pointer hover:opacity-80"
                                 onClick={() => window.open(request.receiptImage, '_blank')}
                               />
+                            </div>
+                          )}
+                          {(request as any).folderEvidence && (
+                            <div className="mt-2">
+                              <a
+                                href={(request as any).folderEvidence}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline text-sm"
+                              >
+                                Buka Folder GDrive
+                              </a>
                             </div>
                           )}
                         </div>

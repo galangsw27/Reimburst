@@ -139,40 +139,17 @@ export async function POST(request: NextRequest) {
         
         // Function to save single evidence to GDrive
         const saveToGdrive = async (filePath: string | null, label: string): Promise<string | null> => {
-          if (!filePath) return null;
-          
-          // Check if it's a base64 string (already uploaded, not from local storage)
-          if (filePath.startsWith('data:')) {
-            // Already a base64 data URL
-            const base64Data = filePath.split(',')[1];
-            const ext = filePath.match(/data:image\/(\w+);base64/)?.[1] || 'jpg';
-            const fileName = `${label}_${Date.now()}.${ext}`;
-            
-            try {
-              const response = await axios.post(gdriveWebhookUrl, {
-                reimbursementId: reimbursement.id,
-                projectName: data.project,
-                fileName: fileName,
-                base64: base64Data
-              }, { timeout: 30000 });
-              
-              if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
-                return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
-              }
-            } catch (gdriveError) {
-              console.error(`Failed to save ${label} to GDrive:`, gdriveError);
-            }
-            return null;
+          if (!filePath || filePath.startsWith('http') || filePath.includes('drive.google.com')) {
+            return filePath;
           }
-          
-          // It's a local file path - read and convert to base64
+
           const fullPath = path.join(uploadDir, path.basename(filePath));
           if (fs.existsSync(fullPath)) {
             const fileBuffer = fs.readFileSync(fullPath);
             const base64Data = fileBuffer.toString('base64');
             const ext = path.extname(filePath).slice(1) || 'jpg';
             const fileName = `${label}_${path.basename(filePath)}`;
-            
+
             try {
               const response = await axios.post(gdriveWebhookUrl, {
                 reimbursementId: reimbursement.id,
@@ -180,7 +157,7 @@ export async function POST(request: NextRequest) {
                 fileName: fileName,
                 base64: base64Data
               }, { timeout: 30000 });
-              
+
               if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
                 return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
               }
