@@ -26,7 +26,7 @@ import * as ExcelJS from 'exceljs';
 import { existsSync } from 'fs';
 import path from 'path';
 
-const TEMPLATE_FILENAME = 'Form Reimbursement S&P - Dunia Games - 20 March 2026.xlsx';
+const TEMPLATE_FILENAME = 'Template_Form.xlsx';
 const TEMPLATE_SHEET_NAME = 'Reimburse';
 const TEMPLATE_DATA_START_ROW = 11;
 const TEMPLATE_DATA_END_ROW = 125;
@@ -377,7 +377,7 @@ export class DatabaseReportService implements IReportService {
   }
 
   private getTemplatePath(): string {
-    const templatePath = path.join(process.cwd(), TEMPLATE_FILENAME);
+    const templatePath = path.join(process.cwd(), 'public', 'templates', TEMPLATE_FILENAME);
     if (!existsSync(templatePath)) {
       throw new Error(`Excel template not found at ${templatePath}`);
     }
