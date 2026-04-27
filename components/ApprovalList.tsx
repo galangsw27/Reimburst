@@ -954,7 +954,7 @@ export const ApprovalList: React.FC<ApprovalListProps> = ({ onUpdate }) => {
                       rel="noopener noreferrer"
                       className="text-blue-500 hover:underline block mb-4 text-sm"
                     >
-                      Buka Folder GDrive
+                      Buka Folder Evidence
                     </a>
                   )}
 

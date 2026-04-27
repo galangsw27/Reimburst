@@ -494,7 +494,6 @@ export function RequestTable({
                               {request.receiptImage ? (
                                 <div className="flex gap-2">
                                   <div onClick={() => setPreviewImage(request.receiptImage as string)} className="inline-block relative" title="Klik untuk memperbesar">
-                                    <span className="absolute -top-1 -left-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">1</span>
                                     <img
                                       src={request.receiptImage}
                                       alt="Evidence"
@@ -503,7 +502,6 @@ export function RequestTable({
                                   </div>
                                   {request.receiptImage2 && (
                                     <div onClick={() => setPreviewImage(request.receiptImage2 as string)} className="inline-block relative" title="Evidence Pendukung - Klik untuk memperbesar">
-                                      <span className="absolute -top-1 -left-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">2</span>
                                       <img
                                         src={request.receiptImage2}
                                         alt="Evidence 2"
@@ -517,31 +515,14 @@ export function RequestTable({
                               )}
                             </div>
                             <div className="col-span-2">
-                              <span className="text-muted-foreground block mb-1">Folder GDrive</span>
+                              <span className="text-muted-foreground block mb-1">Folder Evidence</span>
                               {(request as any).folderEvidence ? (
                                 <a href={(request as any).folderEvidence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                  Buka GDrive
+                                  Buka Folder
                                 </a>
                               ) : (
                                 <span className="font-medium block">-</span>
                               )}
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-muted-foreground block mb-1">Folder Evidence</span>
-                              <span className="font-medium max-w-[300px] truncate block" title={(request as any).folderEvidence || '-'}>
-                                {(request as any).folderEvidence ? (
-                                  ((request as any).folderEvidence.startsWith('http') || (request as any).folderEvidence.includes('drive.google.com')) ? (
-                                    <a href={(request as any).folderEvidence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                      <span className="inline-flex items-center justify-center w-4 h-4 bg-green-500 rounded-full text-[10px] font-bold text-black mr-1">1</span>
-                                      Buka Folder
-                                    </a>
-                                  ) : (
-                                    (request as any).folderEvidence
-                                  )
-                                ) : (
-                                  '-'
-                                )}
-                              </span>
                             </div>
                             <div className="col-span-2">
                               <span className="text-muted-foreground block">Remark</span>

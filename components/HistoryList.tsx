@@ -712,7 +712,7 @@ export const HistoryList: React.FC<HistoryListProps> = () => {
                                 rel="noopener noreferrer"
                                 className="text-blue-500 hover:underline text-sm"
                               >
-                                Buka Folder GDrive
+                                Buka Folder Evidence
                               </a>
                             </div>
                           )}
