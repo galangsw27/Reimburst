@@ -206,8 +206,8 @@ export class DatabaseFileService implements IFileService {
     const countResult = await db.query(countQuery, [requestId]);
     const sequence = parseInt(countResult.rows[0].count) + 1;
     
-    // Generate system filename with format [sequence]_transaction_id.ext
-    const systemFileName = `[${sequence}]_${requestId}${extension}`;
+    // Generate system filename with format sequence_transaction_id.ext (no brackets for Supabase)
+    const systemFileName = `${sequence}_${requestId}${extension}`;
     
     return systemFileName;
   }
