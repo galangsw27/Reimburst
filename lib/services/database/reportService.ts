@@ -434,17 +434,19 @@ export class DatabaseReportService implements IReportService {
       worksheet.getCell(`F${rowNumber}`).value = reimbursement.paymentMethod || '';
       worksheet.getCell(`G${rowNumber}`).value = amount;
       worksheet.getCell(`H${rowNumber}`).value = adminFee > 0 ? adminFee : null;
-      worksheet.getCell(`I${rowNumber}`).value = serviceFee > 0 ? serviceFee : null;
-      worksheet.getCell(`J${rowNumber}`).value = {
-        formula: `SUM(G${rowNumber}+H${rowNumber}+I${rowNumber})`,
+      worksheet.getCell(`I${rowNumber}`).value = this.normalizeNumber(reimbursement.shippingFee) ?? 0;
+      worksheet.getCell(`J${rowNumber}`).value = serviceFee > 0 ? serviceFee : null;
+      worksheet.getCell(`K${rowNumber}`).value = this.normalizeNumber(reimbursement.discount) ?? 0;
+      worksheet.getCell(`L${rowNumber}`).value = reimbursement.loginStatus || '';
+      worksheet.getCell(`M${rowNumber}`).value = {
+        formula: `SUM(G${rowNumber}:K${rowNumber})`,
         result: totalAmount,
       };
-      worksheet.getCell(`K${rowNumber}`).value = reimbursement.by || '';
-      worksheet.getCell(`L${rowNumber}`).value = reimbursement.loginStatus || '';
-      worksheet.getCell(`M${rowNumber}`).value = reimbursement.folderEvidence || reimbursement.receiptImage || '';
-      worksheet.getCell(`N${rowNumber}`).value = remark;
-      worksheet.getCell(`O${rowNumber}`).value = approvedText;
-      worksheet.getCell(`P${rowNumber}`).value = comment;
+      worksheet.getCell(`N${rowNumber}`).value = reimbursement.by || '';
+      worksheet.getCell(`O${rowNumber}`).value = reimbursement.folderEvidence || reimbursement.receiptImage || '';
+      worksheet.getCell(`P${rowNumber}`).value = remark;
+      worksheet.getCell(`Q${rowNumber}`).value = approvedText;
+      worksheet.getCell(`R${rowNumber}`).value = comment;
     });
 
     worksheet.getCell('D135').value = this.getSharedValue(reimbursements, (item) => item.employeeName, '');
