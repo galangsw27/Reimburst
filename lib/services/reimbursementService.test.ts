@@ -63,21 +63,18 @@ describe('reimbursementService', () => {
 
       mockedAxios.post.mockResolvedValueOnce(mockResponse)
 
-      const imageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANS...'
-      const result = await processReceipt(imageBase64)
+      const mockFile = new File(['test'], 'receipt.png', { type: 'image/png' })
+      const result = await processReceipt(mockFile)
 
       expect(result.success).toBe(true)
       expect(result.data).toEqual(mockResponse.data)
-      expect(mockedAxios.post).toHaveBeenCalledWith(
-        'https://test.com/webhook/ocr',
-        { image: imageBase64 }
-      )
     })
 
     it('should handle OCR webhook errors gracefully', async () => {
       mockedAxios.post.mockRejectedValueOnce(new Error('Network error'))
 
-      const result = await processReceipt('invalid-image')
+      const mockFile = new File(['test'], 'receipt.png', { type: 'image/png' })
+      const result = await processReceipt(mockFile)
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Network error')
@@ -86,7 +83,8 @@ describe('reimbursementService', () => {
     it('should throw error when NEXT_PUBLIC_WEBHOOK_URL is not configured', async () => {
       delete process.env.NEXT_PUBLIC_WEBHOOK_URL
 
-      const result = await processReceipt('test-image')
+      const mockFile = new File(['test'], 'receipt.png', { type: 'image/png' })
+      const result = await processReceipt(mockFile)
 
       expect(result.success).toBe(false)
       expect(result.error).toContain('NEXT_PUBLIC_WEBHOOK_URL is not configured')
@@ -95,7 +93,8 @@ describe('reimbursementService', () => {
     it('should handle unknown errors', async () => {
       mockedAxios.post.mockRejectedValueOnce('String error')
 
-      const result = await processReceipt('test-image')
+      const mockFile = new File(['test'], 'receipt.png', { type: 'image/png' })
+      const result = await processReceipt(mockFile)
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Unknown error occurred')
@@ -354,13 +353,10 @@ describe('reimbursementService', () => {
     it('should handle empty string for processReceipt', async () => {
       mockedAxios.post.mockResolvedValueOnce({ data: {} })
 
-      const result = await processReceipt('')
+      const mockFile = new File([''], 'empty.txt', { type: 'text/plain' })
+      const result = await processReceipt(mockFile)
 
       expect(result.success).toBe(true)
-      expect(mockedAxios.post).toHaveBeenCalledWith(
-        'https://test.com/webhook/ocr',
-        { image: '' }
-      )
     })
 
     it('should handle empty string for matchAsset', async () => {

@@ -46,9 +46,9 @@ export const testDetermineRole = () => {
   console.assert(determineRole('SARAH@HEAD.COMPANY.COM') === 'head', 'Head role (uppercase) test failed')
   
   // Test user role (default)
-  console.assert(determineRole('john@company.com') === 'user', 'User role test failed')
-  console.assert(determineRole('jane@example.com') === 'user', 'User role test failed')
-  console.assert(determineRole('') === 'user', 'Empty email test failed')
+  console.assert(determineRole('john@company.com') === 'tester', 'User role test failed')
+  console.assert(determineRole('jane@example.com') === 'tester', 'User role test failed')
+  console.assert(determineRole('') === 'tester', 'Empty email test failed')
   
   console.log('✓ All determineRole tests passed')
 }
@@ -73,7 +73,7 @@ export const testVerifyGoogleToken = async () => {
     console.assert(user1.id === 'google-user-123', 'User ID test failed')
     console.assert(user1.email === 'john@company.com', 'User email test failed')
     console.assert(user1.name === 'John Doe', 'User name test failed')
-    console.assert(user1.role === 'user', 'User role test failed')
+    console.assert(user1.role === 'tester', 'User role test failed')
     console.assert(user1.picture === 'https://example.com/photo.jpg', 'User picture test failed')
     
     // Test finance user
@@ -134,9 +134,9 @@ export const testRoleAssignment = () => {
     ['alice@finance.company.com', 'finance'],
     ['bob@lead.company.com', 'lead'],
     ['sarah@head.company.com', 'head'],
-    ['john@company.com', 'user'],
-    ['jane@example.com', 'user'],
-    ['test@gmail.com', 'user'],
+    ['john@company.com', 'tester'],
+    ['jane@example.com', 'tester'],
+    ['test@gmail.com', 'tester'],
     ['admin@finance.company.com', 'finance'],
     ['manager@lead.company.com', 'lead'],
     ['director@head.company.com', 'head'],

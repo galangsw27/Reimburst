@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getReimbursementService } from '@/lib/services/factory';
+import { getProjectService, getReimbursementService } from '@/lib/services/factory';
 import { ReimbursementFilters } from '@/lib/services/types';
 import { ReimbursementStatus } from '@/lib/types';
 import { authenticateAndAuthorize } from '@/lib/auth/middleware';
@@ -130,6 +130,22 @@ export async function POST(request: NextRequest) {
     
     const reimbursement = await reimbursementService.createReimbursement(data);
 
+    // Resolve project name for GDrive folder
+    // Priority: reimbursement.project (from DB) > data.project > data.projectId > 'Untitled'
+    const resolvedProjectName = (() => {
+      if (reimbursement.project && typeof reimbursement.project === 'string' && reimbursement.project.trim()) {
+        return reimbursement.project.trim();
+      }
+      if (typeof data.project === 'string' && data.project.trim()) {
+        return data.project.trim();
+      }
+      const projectId = data.projectId;
+      if (typeof projectId === 'string' && projectId.trim()) {
+        return projectId.trim();
+      }
+      return 'Untitled';
+    })();
+
     // Save evidence to Google Drive via n8n webhook (server-side only, no logging for security)
     const gdriveWebhookUrl = process.env.N8N_GDRIVE_WEBHOOK_URL;
     
@@ -143,6 +159,30 @@ export async function POST(request: NextRequest) {
             return filePath;
           }
 
+          // Check if it's a base64 string (already uploaded, not from local storage)
+          if (filePath.startsWith('data:')) {
+            // Already a base64 data URL
+            const base64Data = filePath.split(',')[1];
+            const ext = filePath.match(/data:image\/(\w+);base64/)?.[1] || 'jpg';
+            const fileName = `${label}_${Date.now()}.${ext}`;
+
+            try {
+              const response = await axios.post(gdriveWebhookUrl, {
+                reimbursementId: reimbursement.id,
+                projectName: resolvedProjectName,
+                fileName: fileName,
+                base64: base64Data
+              }, { timeout: 30000 });
+
+              if (response.data?.evidenceFolder || response.data?.folderUrl || response.data?.webViewLink) {
+                return response.data.evidenceFolder || response.data.folderUrl || response.data.webViewLink;
+              }
+            } catch (gdriveError) {
+              console.error(`Failed to save ${label} to GDrive:`, gdriveError);
+            }
+            return null;
+          }
+
           const fullPath = path.join(uploadDir, path.basename(filePath));
           if (fs.existsSync(fullPath)) {
             const fileBuffer = fs.readFileSync(fullPath);
@@ -153,7 +193,7 @@ export async function POST(request: NextRequest) {
             try {
               const response = await axios.post(gdriveWebhookUrl, {
                 reimbursementId: reimbursement.id,
-                projectName: data.project,
+                projectName: resolvedProjectName,
                 fileName: fileName,
                 base64: base64Data
               }, { timeout: 30000 });
