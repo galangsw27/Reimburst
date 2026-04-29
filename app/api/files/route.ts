@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const requestId = formData.get('requestId') as string;
+    const projectName = (formData.get('projectName') as string) || '';
     
     // Validate required fields
     if (!file) {
@@ -86,8 +87,9 @@ export async function POST(request: NextRequest) {
     // Upload file with metadata creation
     const fileDocument = await fileService.uploadFile({
       requestId,
-      file
-    });
+      file,
+      projectName: projectName.trim() || undefined
+    } as any);
     
     return NextResponse.json(fileDocument, { status: 201 });
     

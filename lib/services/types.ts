@@ -165,6 +165,7 @@ export interface AssetFilters {
 export interface UploadFileInput {
   requestId: string;
   file: File;
+  projectName?: string;
 }
 
 /**

@@ -174,6 +174,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
       const formData = new FormData()
       formData.append('file', file)
       formData.append('requestId', requestId)
+      formData.append('projectName', data.project)
 
       const uploadResponse = await apiClient.post('/api/files', formData, {
         headers: {
@@ -396,6 +397,7 @@ export const UploadForm: React.FC<UploadFormProps> = ({ onSuccess, initialProjec
       const formData = new FormData()
       formData.append('file', file)
       formData.append('requestId', requestId)
+      formData.append('projectName', data.project)
 
       const uploadResponse = await apiClient.post('/api/files', formData, {
         headers: {

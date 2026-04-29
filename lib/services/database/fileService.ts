@@ -70,7 +70,7 @@ export class DatabaseFileService implements IFileService {
    * - 3.3: Anti-duplication checking before upload
    */
   async uploadFile(data: UploadFileInput): Promise<FileDocument> {
-    const { requestId, file } = data;
+    const { requestId, file, projectName } = data;
     
     // Check for duplicate file content (simple check by name and size)
     const existingFiles = await this.getFilesByRequest(requestId);
@@ -100,7 +100,8 @@ export class DatabaseFileService implements IFileService {
         const response = await axios.post(gdriveWebhookUrl, {
           requestId,
           fileName: systemFileName,
-          base64: fileBuffer.toString('base64')
+          base64: fileBuffer.toString('base64'),
+          projectName: projectName || 'Untitled'
         }, { timeout: 30000 });
 
         gdriveUrl = response.data?.evidenceFolder
